@@ -129,6 +129,15 @@ def tool_edit_picture(args, chat_obj, owner):
     if not imgedit.status()["ready"]:
         return "The offline image model is not installed yet. Tell the user to run setup_image_model.sh (see the Pictures tab).", None
     name = next((m["images"][-1] for m in reversed(chat_obj["messages"]) if m.get("images")), None)
+    for m in reversed(chat_obj["messages"]):   # newest wins: a picture the app made in this chat can be edited too
+        card = m.get("card") or {}
+        if card.get("kind") == "image_job":
+            made = f"{card['job']}_0.png"
+            if (imgedit.DIR / made).exists():
+                name = made
+            break
+        if m.get("images"):
+            break
     if not name:
         return "No picture is attached to this chat. Ask the user to drag a picture into the chat (or use the paperclip).", None
     import base64 as b64

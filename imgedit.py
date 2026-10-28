@@ -177,6 +177,19 @@ def gen_status():
     return {"ready": GEN_BIN.exists() and any(cache.rglob("*.safetensors")) if cache.exists() else False}
 
 
+def free_chat_memory():
+    """Unloads the language models from memory so the picture model has room (otherwise the Mac swaps and a picture takes minutes)."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/ps", timeout=3) as r:
+            loaded = [m["name"] for m in json.load(r).get("models", [])]
+        for n in loaded:
+            req = urllib.request.Request("http://127.0.0.1:11434/api/generate", json.dumps({"model": n, "keep_alive": 0}).encode(), {"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10).read()
+    except Exception:
+        pass
+
+
 def _run_gen(job_id, seed, w, h):
     """Creates one picture from a prompt (Z-Image-Turbo, 4-bit, about 10 s once loaded). Shares the lock with picture edits."""
     job = jobs[job_id]
@@ -184,6 +197,7 @@ def _run_gen(job_id, seed, w, h):
     try:
         with lock:
             job["status"] = "running"
+            free_chat_memory()
             out = DIR / f"{job_id}_0.png"
             cmd = [str(GEN_BIN), "--model", GEN_MODEL, "--base-model", "z-image-turbo", "--prompt", job["prompt"], "--steps", str(GEN_STEPS),
                    "--seed", str(seed), "--width", str(w), "--height", str(h), "--output", str(out)]
