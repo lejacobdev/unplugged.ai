@@ -21,7 +21,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothin
 |---|---|
 | **Chat** | A chatbot interface with two models: **stereo 2** (the stronger reasoning model, `gpt-oss:20b`) and **mono 2** (the lighter model, `qwen3:14b`). Both are the original Ollama models under app names; fine-tuned versions are planned and not available yet. Reasoning effort switch, tool calling, markdown, chat history, incognito chats. Attach files to a message: plain text and code files and Word (.docx) files were tested with both models; PDF, PowerPoint and Excel reading is implemented but untested. Binary files are accepted but the model says it cannot read them. |
 | **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Ask for a piece in the chat and it appears there as a player with a piano roll, preview and MIDI downloads (both chat models can do this); the Music tab has a prompt box with a model picker (the chosen model reads your request) and advanced sliders. Name an artist or song and the piece starts from the opening of a real piece by them in your local training library, then continues as new music; if nobody by that name is in the library you get a general piece and are told so. |
-| **Picture edit** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
+| **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
 | **Console** | A live log of everything the models are doing. |
 | **Accounts** | Per-user history and settings, guest mode that deletes everything when you leave, incognito chats. |
 | **iPhone** | Use it from the phone's browser; the Mac does the computing. Home-screen install and the offline shell are built but **not yet tested on a real iPhone**. |
@@ -32,7 +32,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothin
 </p>
 <p align="center">
 <img src="docs/img/desktop-music.png" width="49%" alt="Music">
-<img src="docs/img/desktop-cover.png" width="49%" alt="Picture edit">
+<img src="docs/img/desktop-cover.png" width="49%" alt="Pictures">
 </p>
 
 <p align="center">

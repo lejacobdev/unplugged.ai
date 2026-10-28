@@ -287,7 +287,7 @@ def tool_generate_music(args, chat_obj, owner):
 
 def tool_edit_picture(args, chat_obj, owner):
     if not imgedit.status()["ready"]:
-        return "The offline image model is not installed yet. Tell the user to run setup_image_model.sh (see the Picture edit tab).", None
+        return "The offline image model is not installed yet. Tell the user to run setup_image_model.sh (see the Pictures tab).", None
     name = next((m["images"][-1] for m in reversed(chat_obj["messages"]) if m.get("images")), None)
     if not name:
         return "No picture is attached to this chat. Ask the user to drag a picture into the chat (or use the paperclip).", None
