@@ -22,7 +22,7 @@
     if (name === 'cover') { checkImg(); loadHist(); }
     if (name === 'music') draw();
     if (name === 'console') renderCon();
-    if (name === 'chat') { scrollDown(); el('input').focus(); }
+    if (name === 'chat') { scrollDown(true); el('input').focus(); }
   };
   document.querySelectorAll('.nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
   el('menu').onclick = () => el('side').classList.toggle('open');
@@ -101,7 +101,7 @@
   let chats = [], cur = { id: null, messages: [], title: 'New chat' }, streaming = false, ctrl = null, attached = null, files = [];
   const S = Store.get('chat-settings') || {};
   const settings = { model: S.model || 'gpt-oss:20b', think: S.think || 'low', tools: S.tools !== false, system: S.system || '' };
-  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true }, Store.get('prefs') || {});
+  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true, memory: true }, Store.get('prefs') || {});
   const savePrefs = () => Store.set('prefs', PF);
   const saveSettings = () => Store.set('chat-settings', settings);
 
@@ -193,7 +193,16 @@
   const setTitle = () => { el('ttl').innerHTML = (cur.incognito ? ico('incognito') + ' ' : '') + esc(cur.title || 'New chat'); el('tab-chat').classList.toggle('incognito', !!cur.incognito); };
 
   // ---------- rendering
-  const scrollDown = () => { const m = el('msgs'); m.scrollTop = m.scrollHeight; };
+  // Follow the stream only while the reader is at the bottom; scrolling up stops it, and the arrow button brings them back.
+  let stuck = true;
+  const msgsEl = el('msgs'), toBottom = el('tobottom');
+  toBottom.innerHTML = ico('arrowdown');
+  const gap = () => msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight;
+  const syncArrow = () => { toBottom.hidden = gap() < 120; };
+  msgsEl.addEventListener('scroll', () => { stuck = gap() < 60; syncArrow(); }, { passive: true });
+  const scrollDown = force => { if (force) stuck = true; if (stuck) msgsEl.scrollTop = msgsEl.scrollHeight; syncArrow(); };
+  toBottom.onclick = () => { stuck = true; msgsEl.scrollTo({ top: msgsEl.scrollHeight, behavior: 'smooth' }); };
+  new ResizeObserver(syncArrow).observe(el('inner'));
   function toolCard(name, args, text, card, running) {
     const d = document.createElement('div'); d.className = 'tool' + (running ? '' : ' done');
     const label = { generate_music: 'Making music', edit_picture: 'Editing picture', list_music: 'Looking up your music' }[name] || name;
@@ -318,7 +327,7 @@
     const same = shown.id === cur.id, fromN = same ? shown.n : 0;
     cur.messages.forEach((m, i) => { if (m.role === 'assistant' && !m.content && !m.thinking) return; const node = msgEl(m, i, i === lastAssist && !streaming); if (i >= fromN) node.classList.add('fresh'); inner.appendChild(node); });
     shown = { id: cur.id, n: cur.messages.length };
-    scrollDown();
+    scrollDown(!same);
   }
   document.addEventListener('click', e => {
     const b = e.target.closest('.cp'); if (!b) return;
@@ -366,12 +375,13 @@
   async function stop() { if (cur.id) await fetch('/api/chat/stop?id=' + cur.id, { method: 'POST' }); }
 
   async function send(_e, regenerate = false) {
+    stuck = true;
     if (streaming) return;
     const text = input.value.trim();
     if (!regenerate && !text && !attached && !files.length) return;
     if (macDown) { setBanner(bannerText, true); return; }
     if (!cur.id) { const c = await post('/api/chat/new', { model: settings.model, incognito: !!cur.incognito }); cur.id = c.id; }
-    const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, personal: { name: PF.name, about: PF.about, style: PF.style, instr: PF.instr }, regenerate };
+    const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, personal: { name: PF.name, about: PF.about, style: PF.style, instr: PF.instr }, memory: PF.memory !== false, regenerate };
     if (!regenerate) {
       body.content = text; if (attached) body.image = attached;
       if (files.length) body.files = files.map(f => ({ name: f.name, data: f.data }));
@@ -500,7 +510,20 @@
     document.dispatchEvent(new Event('ui-sync'));
   }
   function open(sec) { fill(); show(sec || 'general'); if (!dlg.open) dlg.showModal(); }
-  function show(sec) { dlg.querySelectorAll('.setnav button').forEach(b => b.classList.toggle('on', b.dataset.s === sec)); dlg.querySelectorAll('.setpane section').forEach(s => { s.hidden = s.dataset.s !== sec; }); }
+  async function loadMem(items) {
+    try { items = items || (await J('/api/memory')).items; } catch (e) { return; }
+    el('m-list').innerHTML = '';
+    for (const it of items.slice().reverse()) {
+      const r = document.createElement('div'); r.className = 'memrow'; const t = document.createElement('span'); t.textContent = it.text;
+      const b = document.createElement('button'); b.type = 'button'; b.title = 'Forget this'; b.innerHTML = ico('x');
+      b.onclick = async () => loadMem((await J('/api/memory?id=' + it.id, { method: 'DELETE' })).items);
+      r.append(t, b); el('m-list').appendChild(r);
+    }
+    el('m-hint').textContent = items.length ? items.length + (items.length === 1 ? ' thing remembered.' : ' things remembered.') : 'Nothing remembered yet. It learns from your chats as you go, or tell it to remember something.';
+    el('m-clear').hidden = !items.length;
+  }
+  function show(sec) {
+    if (sec === 'memory') { el('m-on').checked = PF.memory !== false; loadMem(); } dlg.querySelectorAll('.setnav button').forEach(b => b.classList.toggle('on', b.dataset.s === sec)); dlg.querySelectorAll('.setpane section').forEach(s => { s.hidden = s.dataset.s !== sec; }); }
   el('setnav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.s); };
   el('setx').innerHTML = window.ico ? ico('x') : '&times;'; el('setx').onclick = () => dlg.close();
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
@@ -510,6 +533,10 @@
   el('s-think').onchange = () => { settings.think = el('s-think').value; el('think').value = settings.think; saveSettings(); el('think').dispatchEvent(new Event('change')); };
   el('s-model').onchange = () => { settings.model = el('s-model').value; el('model').value = settings.model; saveSettings(); el('model').dispatchEvent(new Event('change')); };
   for (const [id, k] of [['p-name', 'name'], ['p-about', 'about'], ['p-instr', 'instr']]) el(id).oninput = () => { PF[k] = el(id).value; savePrefs(); };
+  el('m-on').onchange = () => { PF.memory = el('m-on').checked; savePrefs(); };
+  const addMem = async () => { const t = el('m-new').value.trim(); if (!t) return; el('m-new').value = ''; loadMem((await post('/api/memory', { text: t })).items); };
+  el('m-add').onclick = addMem; el('m-new').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addMem(); } };
+  el('m-clear').onclick = async () => { if (await UI.confirm('Everything the model remembers about you will be erased.', { title: 'Clear memory?', ok: 'Clear', danger: true })) loadMem((await J('/api/memory?all=1', { method: 'DELETE' })).items); };
   el('p-reset').onclick = () => { Object.assign(PF, { name: '', about: '', style: 'default', instr: '' }); savePrefs(); fill(); };
   applySize();
 })();

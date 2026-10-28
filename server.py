@@ -307,6 +307,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, logbus.since(int(q.get("since", 0)), o["uid"]))
             if u.path == "/api/chat/status":
                 return self.send(200, chat.status())
+            if u.path == "/api/memory":
+                return self.send(200, {"items": chat.mem_load(o)})
             if u.path == "/api/chat/list":
                 return self.send(200, chat.list_chats(o))
             if u.path == "/api/chat/get":
@@ -382,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/img/cancel":
             imgedit.cancel(o, parse_qs(urlparse(self.path).query).get("id", [""])[0])
             return self.send(200, {"ok": True})
-        if path.startswith("/api/chat/"):
+        if path.startswith("/api/chat/") or path == "/api/memory":
             return self.chat_post(path)
         if path == "/api/music/prompt":
             try:
@@ -485,6 +487,9 @@ class Handler(BaseHTTPRequestHandler):
             body = self.body_json()
             if path == "/api/chat/new":
                 return self.send(200, chat.new_chat(o, body.get("model"), bool(body.get("incognito"))))
+            if path == "/api/memory":
+                it = chat.mem_add(o, body.get("text", ""), "manual")
+                return self.send(200, {"items": chat.mem_load(o), "added": bool(it)})
             if path == "/api/chat/rename":
                 chat.rename(o, body["id"], body["title"])
                 return self.send(200, {"ok": True})
@@ -525,6 +530,9 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if u.path == "/api/memory":
+                chat.mem_clear(o) if q.get("all") else chat.mem_delete(o, q.get("id"))
+                return self.send(200, {"items": chat.mem_load(o)})
             if u.path == "/api/chat/item":
                 chat.delete(o, q.get("id"))
                 return self.send(200, {"ok": True})

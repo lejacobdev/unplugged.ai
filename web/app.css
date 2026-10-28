@@ -607,3 +607,22 @@ pre.lyr { white-space: pre-wrap; font: inherit; font-size: 13.5px; color: var(--
 .hist h4 .hnew { border: none; background: none; color: var(--muted); width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; padding: 0; margin: -4px 0; }
 .hist h4 .hnew:hover { background: var(--hover); color: var(--ink); }
 .hist h4 .hnew .i { width: 16px; height: 16px; }
+
+/* scroll-to-bottom arrow */
+.composer { position: relative; }
+.tobottom { position: absolute; left: 50%; top: -46px; transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--ink); display: grid; place-items: center; cursor: pointer; padding: 0; box-shadow: 0 2px 10px rgba(0,0,0,.25); z-index: 5; animation: fadein .15s ease; }
+.tobottom[hidden] { display: none; }
+.tobottom:hover { background: var(--hover); }
+.tobottom .i { width: 18px; height: 18px; }
+
+/* memory pane */
+.memadd { display: flex; gap: 8px; margin: 10px 0 6px; }
+.memadd input { flex: 1; margin: 0 !important; }
+.memadd button, .setfoot #m-clear { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 10px; padding: 0 16px; font: inherit; font-size: 14px; cursor: pointer; }
+.memadd button:hover, .setfoot #m-clear:hover { background: var(--hover); }
+.memlist { display: flex; flex-direction: column; margin-top: 8px; }
+.memrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--line); font-size: 14px; line-height: 1.45; }
+.memrow:last-child { border-bottom: none; }
+.memrow button { flex: none; border: none; background: none; color: var(--muted); width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; padding: 0; }
+.memrow button:hover { background: var(--hover); color: var(--ink); }
+.memrow .i { width: 15px; height: 15px; }

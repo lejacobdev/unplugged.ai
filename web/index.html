@@ -147,7 +147,7 @@
   </div>
   <div class="banner" id="banner"></div>
   <div class="msgs" id="msgs"><div class="inner" id="inner"></div></div>
-  <div class="composer"><div class="box">
+  <div class="composer"><button type="button" class="tobottom" id="tobottom" title="Scroll to bottom" aria-label="Scroll to bottom" hidden></button><div class="box">
     <div class="attach" id="attach"></div>
     <div class="row"><div class="attwrap"><button id="attbtn" class="roundbtn" title="Add files and more" aria-haspopup="true"><i data-i="plus"></i></button>
         <div class="attmenu" id="attmenu" hidden>
@@ -296,6 +296,7 @@
   <nav class="setnav" id="setnav">
     <button data-s="general" class="on">General</button>
     <button data-s="personal">Personalization</button>
+    <button data-s="memory">Memory</button>
   </nav>
   <div class="setpane">
     <section data-s="general">
@@ -313,6 +314,13 @@
       <div class="setlbl">Answer style<div class="seg seg4" id="p-style" data-v="default"></div></div>
       <label class="setlbl">Custom instructions<textarea id="p-instr" rows="6" maxlength="2000" placeholder="Anything else the model should always know or do"></textarea></label>
       <div class="setfoot"><button id="p-reset" type="button">Clear personalization</button></div>
+    </section>
+    <section data-s="memory" hidden>
+      <div class="setrow"><div><b>Use memory</b><small>The model remembers lasting things you tell it, across chats and sessions, and can search your earlier chats. Incognito chats never use or change it.</small></div><input type="checkbox" id="m-on" class="switch"></div>
+      <p class="hint" id="m-hint"></p>
+      <div class="memadd"><input id="m-new" maxlength="240" placeholder="Add something for it to remember"><button type="button" id="m-add">Add</button></div>
+      <div class="memlist" id="m-list"></div>
+      <div class="setfoot"><button id="m-clear" type="button">Clear all memory</button></div>
     </section>
   </div>
 </div></dialog>

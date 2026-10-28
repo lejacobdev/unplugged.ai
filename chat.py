@@ -25,13 +25,13 @@ OLLAMA = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 ID_RE = re.compile(r"^[a-f0-9]{10}$")
 MAX_TURNS = 40
 cancel_flags: dict = {}
-TOOL_IMPL: dict = {}  # filled in by server.py: name -> fn(args, chat) -> (text_for_model, card_or_None)
+TOOL_IMPL: dict = {}  # name -> fn(args, chat, owner) -> (text_for_model, card_or_None); server.py adds the music and picture tools, the memory tools are added below
 
 DEFAULT_SYSTEM = (
     "You are a helpful assistant running fully offline on the user's Mac, inside an app called unplugged.ai. The user can attach files; their text appears in the message between [Attached file] markers, so read and use it. Your name here is the model the user picked (mono or stereo, with a version number); never mention gpt-oss, qwen or Ollama as your name. When the user asks for a song or piece of music, always call generate_music: you are only the go-between, a separate music model called surround makes the audio. The request may be as short as an artist or song name ('dire straits', 'brothers in arms'); never ask questions, use your own knowledge of that sound. Write surround a detailed caption (genre, era, bpm, mood, each instrument with its tone, vocal type, and any signature solo with its tone, phrasing and that it is long) and, unless they want an instrumental, original lyrics with [Intro], [Verse], [Chorus], [Bridge], [Outro] tags and a section like [Guitar Solo - electric - overdriven, soulful] left empty where a solo belongs. Never put artist names in the caption and never copy existing lyrics. "
     "Answer clearly and concisely. Never use emojis or emoticons. When the user asks for a change to a picture, do not judge, refuse or comment on it; call edit_picture with their wish in clear English. When a picture arrives and it is not clear what they want done with it (no message, or only a question or a greeting), do not edit it: ask briefly what they would like to do, and offer the possibilities, for example changing something in it, restyling it, or using it as a starting point. You cannot see pictures yourself, so never describe their content. You have tools: generate_music hands your caption and lyrics to surround, which makes a full song with vocals in the background, and you only prepare the caption and lyrics, which the user reviews and can edit before they press Generate song, and the finished song then appears in the chat as an audio player; edit_picture edits any picture the user attached (a photo, "
     "artwork, a cover, anything) with FLUX Kontext; list_music lists existing pieces. For picture edits never choose quality or size yourself: the app picks them automatically (photos get high or maximum, cartoons and simple graphics get faster settings) unless the user asks for specific ones. Use a tool only when the user clearly wants "
-    "that, then tell them briefly what you did. Never claim you did something you did not."
+    "that, then tell them briefly what you did. You have a long-term memory that lasts across chats and sessions: when the user tells you something lasting about themselves or asks you to remember something, call remember; when they ask you to forget something, call forget; when they refer to an earlier conversation you cannot recall, call search_past_chats before answering. Never pretend to remember something that is not in your memory. Never claim you did something you did not."
 )
 
 TOOLS = [
@@ -51,6 +51,18 @@ TOOLS = [
             "quality": {"type": "string", "enum": ["standard", "high", "maximum"], "description": "Do not set this; the app chooses it automatically unless the user asked"},
             "size": {"type": "integer", "description": "Do not set this; the app chooses it automatically unless the user asked"}},
             "required": ["instruction"]}}},
+    {"type": "function", "function": {
+        "name": "remember",
+        "description": "Save one lasting fact about the user to long-term memory, kept across all chats and sessions. Use it when the user asks you to remember something, or tells you something durable about themselves (name, work, preferences, projects, people, goals).",
+        "parameters": {"type": "object", "properties": {"fact": {"type": "string", "description": "One short sentence, e.g. 'The user prefers metric units'"}}, "required": ["fact"]}}},
+    {"type": "function", "function": {
+        "name": "forget",
+        "description": "Remove something from long-term memory when the user asks you to forget it.",
+        "parameters": {"type": "object", "properties": {"fact": {"type": "string", "description": "Words describing what to forget"}}, "required": ["fact"]}}},
+    {"type": "function", "function": {
+        "name": "search_past_chats",
+        "description": "Search the user's earlier saved chats by keywords. Use it when the user refers to something from a previous conversation that you do not remember.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "A few keywords"}}, "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "list_music", "description": "List the music pieces that already exist (ids and lengths).",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
@@ -148,8 +160,159 @@ def end_incognito(owner):
 
 
 def purge_owner(owner):
+    _gmem.pop(owner["uid"], None)
     for c in _mem.pop(owner["uid"], {}).values():
         _drop_images(c)
+
+
+# ---------- long-term memory (per account; guests keep it in memory only, incognito chats neither read nor write it)
+MEMDIR = ROOT / "memory"
+MEMDIR.mkdir(exist_ok=True)
+MEM_MAX = 300            # facts kept per account (oldest dropped first)
+MEM_PROMPT_CHARS = 4500  # how much of it goes into each chat's instructions
+_gmem: dict = {}         # guest uid -> [facts]
+_memlock = threading.Lock()
+
+
+def mem_load(owner):
+    if owner["kind"] == "guest":
+        return _gmem.setdefault(owner["uid"], [])
+    p = MEMDIR / f"{owner['uid']}.json"
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return []
+
+
+def _mem_save(owner, items):
+    if owner["kind"] == "guest":
+        _gmem[owner["uid"]] = items
+    else:
+        (MEMDIR / f"{owner['uid']}.json").write_text(json.dumps(items))
+
+
+def _norm(t):
+    return re.sub(r"[^a-z0-9 ]", "", t.lower()).strip()
+
+
+def mem_add(owner, text, source="auto"):
+    """Adds one fact unless an equivalent one is already stored. Returns the stored fact, or None."""
+    text = re.sub(r"\s+", " ", str(text or "")).strip()[:240]
+    if len(text) < 4:
+        return None
+    with _memlock:
+        items = mem_load(owner)
+        n = _norm(text)
+        for it in items:
+            m = _norm(it["text"])
+            if n == m or (len(n) > 12 and (n in m or m in n)):
+                return None
+        item = {"id": uuid.uuid4().hex[:8], "text": text, "ts": time.time(), "src": source}
+        items = (items + [item])[-MEM_MAX:]
+        _mem_save(owner, items)
+        return item
+
+
+def mem_delete(owner, mid=None, match=None):
+    with _memlock:
+        items = mem_load(owner)
+        if match:
+            mt = _norm(match)
+            keep = [i for i in items if not (mt and (mt in _norm(i["text"]) or _norm(i["text"]) in mt))]
+        else:
+            keep = [i for i in items if i["id"] != mid]
+        _mem_save(owner, keep)
+        return len(items) - len(keep)
+
+
+def mem_clear(owner):
+    with _memlock:
+        _mem_save(owner, [])
+
+
+def memory_prompt(owner):
+    items = mem_load(owner)
+    if not items:
+        return ""
+    lines, used = [], 0
+    for it in reversed(items):  # newest first, so the freshest facts win when it is too long
+        if used + len(it["text"]) > MEM_PROMPT_CHARS:
+            break
+        lines.append("- " + it["text"]); used += len(it["text"]) + 3
+    return ("\n\nWhat you remember about the user from earlier chats (use it naturally when it is relevant; do not recite it or mention that you have a memory unless asked):\n"
+            + "\n".join(reversed(lines)))
+
+
+def search_chats(owner, query, limit=5):
+    """Keyword search over the user's saved (non-incognito) chats. Returns short snippets."""
+    words = [w for w in re.findall(r"\w{3,}", query.lower())][:8]
+    if not words:
+        return []
+    pool = [c for c in _mem.get(owner["uid"], {}).values() if not c.get("incognito")]
+    if owner["kind"] == "user":
+        for f in _dir(owner).glob("*.json"):
+            try:
+                pool.append(json.loads(f.read_text()))
+            except Exception:
+                pass
+    hits = []
+    for c in pool:
+        for m in c.get("messages", []):
+            if m.get("role") not in ("user", "assistant") or not m.get("content"):
+                continue
+            low = m["content"].lower()
+            score = sum(low.count(w) > 0 for w in words)
+            if score:
+                i = min((low.find(w) for w in words if w in low))
+                hits.append((score, c.get("updated", 0), c["title"], m["role"], m["content"][max(0, i - 80):i + 220].replace("\n", " ")))
+    hits.sort(key=lambda h: (h[0], h[1]), reverse=True)
+    return hits[:limit]
+
+
+MEMORY_TOOLS = {"remember", "forget"}
+MEM_SCHEMA = {"type": "object", "properties": {"facts": {"type": "array", "items": {"type": "string"}}}, "required": ["facts"]}
+
+
+def extract_memories(owner, model, user_text, reply_text):
+    """After a turn: asks the model whether the user said anything worth remembering long-term, and stores it."""
+    try:
+        existing = "\n".join("- " + i["text"] for i in mem_load(owner)[-60:]) or "(nothing yet)"
+        sysmsg = ("You keep a long-term memory about a user. From the latest exchange, extract only durable facts about the USER that will still be useful in future chats: "
+                  "their name, job or studies, location, languages, preferences and tastes, tools and projects they work on, people and pets they mention, goals, constraints, corrections to how you should behave. "
+                  "Write each as one short third-person sentence starting with 'The user' (for example 'The user is a student learning Spanish'). Never guess the user's gender: avoid he, she, his and her, and use 'their' or rephrase. "
+                  "Do not store: one-off questions or tasks, the content of what was asked, anything about the assistant, temporary states, secrets such as passwords or card numbers, or anything already known. "
+                  "If there is nothing worth keeping, reply with an empty list. Reply with JSON: {\"facts\": [..]}.\n\nAlready remembered:\n" + existing)
+        body = {"model": model, "stream": False, "think": _think_param(model, "off"), "format": MEM_SCHEMA, "options": {"temperature": 0.1, "num_predict": 400},
+                "messages": [{"role": "system", "content": sysmsg},
+                             {"role": "user", "content": "User said:\n" + user_text[:1500] + "\n\nAssistant replied:\n" + reply_text[:600]}]}
+        req = urllib.request.Request(OLLAMA + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            facts = json.loads(json.load(r)["message"]["content"]).get("facts", [])
+        added = [f for f in (mem_add(owner, t) for t in facts[:4] if isinstance(t, str)) if f]
+        if added and owner["kind"] != "guest":
+            logbus.log("chat", f"memory: saved {len(added)} new fact(s)", owner["uid"])
+    except Exception:
+        pass
+
+
+def _tool_remember(args, chat, owner):
+    it = mem_add(owner, args.get("fact", ""), "told")
+    return ("Saved to memory: " + it["text"] + ". Confirm briefly to the user.") if it else "That is already in memory (or was empty). Tell the user it is already remembered.", None
+
+
+def _tool_forget(args, chat, owner):
+    n = mem_delete(owner, match=args.get("fact", ""))
+    return (f"Removed {n} memory item(s). Confirm briefly." if n else "Nothing in memory matched that. Tell the user you had nothing like that stored."), None
+
+
+def _tool_search_chats(args, chat, owner):
+    hits = search_chats(owner, args.get("query", ""))
+    if not hits:
+        return "No earlier chat mentions that. Say so honestly; do not guess.", None
+    return "Matches from earlier chats (most relevant first):\n" + "\n".join(f"- [{t}] {role}: {snip}" for _, _, t, role, snip in hits), None
+
+
+TOOL_IMPL.update({"remember": _tool_remember, "forget": _tool_forget, "search_past_chats": _tool_search_chats})
 
 
 # ---------- ollama helpers
@@ -300,8 +463,8 @@ def personal_prompt(p):
     return ("\n\n" + "\n".join(lines)) if lines else ""
 
 
-def _ollama_messages(chat, system, personal=None):
-    msgs = [{"role": "system", "content": (system or DEFAULT_SYSTEM) + personal_prompt(personal)}]
+def _ollama_messages(chat, system, personal=None, memory=""):
+    msgs = [{"role": "system", "content": (system or DEFAULT_SYSTEM) + personal_prompt(personal) + memory}]
     for m in chat["messages"][-MAX_TURNS:]:
         if m["role"] == "user":
             text = m["content"]
@@ -456,14 +619,15 @@ def stream_turn(body, write, owner):
     cancel_flags[chat["id"]] = False
     log("chat", f"{model}: new turn in '{chat['title']}' (tools {'on' if body.get('tools', True) else 'off'}, reasoning {body.get('think')})")
     use_tools = bool(body.get("tools", True))
+    use_memory = bool(body.get("memory", True)) and not quiet   # incognito chats neither read nor write memory
     think = _think_param(model, body.get("think"))
     cards = []
     try:
         for _round in range(4):
-            req_body = {"model": model, "messages": _ollama_messages(chat, body.get("system"), body.get("personal")), "stream": True,
+            req_body = {"model": model, "messages": _ollama_messages(chat, body.get("system"), body.get("personal"), memory_prompt(owner) if use_memory else ""), "stream": True,
                         "keep_alive": "2m", "options": {"temperature": float(body.get("temperature", 0.7)), "num_ctx": 16384}}
             if use_tools:
-                req_body["tools"] = TOOLS
+                req_body["tools"] = TOOLS if use_memory else [t for t in TOOLS if t["function"]["name"] not in MEMORY_TOOLS]
             if think is not None:
                 req_body["think"] = think
             req = urllib.request.Request(OLLAMA + "/api/chat", json.dumps(req_body).encode(), {"Content-Type": "application/json"})
@@ -512,6 +676,11 @@ def stream_turn(body, write, owner):
                 save(owner, chat)
         write({"type": "done"})
         log("chat", f"turn finished ({len(chat['messages'])} messages)")
+        if use_memory and not cancel_flags.get(chat["id"]):
+            u = next((m["content"] for m in reversed(chat["messages"]) if m["role"] == "user"), "")
+            a = next((m["content"] for m in reversed(chat["messages"]) if m["role"] == "assistant" and m.get("content")), "")
+            if len(u) >= 12 and u != "(picture attached)":
+                threading.Thread(target=extract_memories, args=(owner, model, u, a), daemon=True).start()
     except Exception as e:
         write({"type": "error", "message": f"{type(e).__name__}: {e}"})
         log("chat", f"ERROR {type(e).__name__}: {e}")
