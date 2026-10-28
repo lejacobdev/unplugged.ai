@@ -14,13 +14,14 @@
 
   // ---------- tab switching
   window.showTab = name => {
-    ['chat', 'music', 'cover', 'console'].forEach(t => { el('tab-' + t).style.display = t === name ? '' : 'none'; });
+    ['chat', 'music', 'cover', 'library', 'console'].forEach(t => { el('tab-' + t).style.display = t === name ? '' : 'none'; });
     document.querySelectorAll('.nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
     el('side').classList.remove('open');
     { const t = el('tab-' + name); t.classList.remove('tab-in'); void t.offsetWidth; t.classList.add('tab-in'); }
     tabNow = name; saveView();
     if (name === 'cover') { checkImg(); loadHist(); }
     if (name === 'music') draw();
+    if (name === 'library') loadLib();
     if (name === 'console') renderCon();
     if (name === 'chat') { scrollDown(true); el('input').focus(); }
   };
@@ -222,7 +223,7 @@
   new ResizeObserver(syncArrow).observe(el('inner'));
   function toolCard(name, args, text, card, running) {
     const d = document.createElement('div'); d.className = 'tool' + (running ? '' : ' done');
-    const label = { generate_music: 'Making music', edit_picture: 'Editing picture', list_music: 'Looking up your music' }[name] || name;
+    const label = { generate_music: 'Making music', edit_picture: 'Editing picture', list_music: 'Looking up your music', look_at_picture: 'Looking at the picture', ask_about_picture: 'Looking closer at the picture', search_documents: 'Searching your documents', remember: 'Saving to memory', forget: 'Removing from memory', search_past_chats: 'Searching earlier chats' }[name] || name;
     d.innerHTML = `<div class="h"><i></i>${running ? label + '…' : label}</div><div class="b"></div>`;
     const b = d.querySelector('.b');
     if (running) { b.textContent = args && Object.keys(args).length ? JSON.stringify(args) : ''; return d; }
@@ -446,6 +447,49 @@
     try { cur = await J('/api/chat/get?id=' + cur.id); } catch (e) {}
     render(); loadList(); setTimeout(loadList, 6000); setTimeout(async () => { await loadList(); const c = chats.find(x => x.id === cur.id); if (c) { cur.title = c.title; setTitle(); } }, 12000);
   }
+
+  // ---------- library (your documents)
+  let libTimer = null;
+  async function loadLib() {
+    let r; try { r = await J('/api/library'); } catch (e) { return; }
+    const box = el('liblist'); box.innerHTML = '';
+    if (!r.items.length) box.innerHTML = '<p class="hint">No documents yet.</p>';
+    for (const d of r.items) {
+      const row = document.createElement('div'); row.className = 'librow';
+      const st = d.status === 'ready' ? d.n + (d.n === 1 ? ' passage' : ' passages') : d.status === 'indexing' ? 'Indexing…' : (d.error || 'Failed');
+      row.innerHTML = `<i></i><div class="libmeta"><b></b><small></small></div><button type="button" title="Remove from library"></button>`;
+      row.querySelector('i').outerHTML = ico('file'); row.querySelector('b').textContent = d.name;
+      row.querySelector('small').textContent = `${fmtSize(d.size)} · ${d.note ? d.note + ' · ' : ''}${st}`;
+      if (d.status === 'error') row.classList.add('bad');
+      const b = row.querySelector('button'); b.innerHTML = ico('x');
+      b.onclick = async () => { if (await UI.confirm(`"${d.name}" will be removed from your library.`, { title: 'Remove document?', ok: 'Remove', danger: true })) { await J('/api/library?id=' + d.id, { method: 'DELETE' }); loadLib(); } };
+      box.appendChild(row);
+    }
+    clearTimeout(libTimer); if (r.items.some(d => d.status === 'indexing')) libTimer = setTimeout(loadLib, 1500);
+  }
+  async function addLibFiles(files) {
+    for (const f of files) {
+      if (f.size > 25 * 1024 * 1024) { UI.alert(f.name + ' is larger than 25 MB.', { title: 'File too large' }); continue; }
+      const data = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(f); });
+      try { await post('/api/library', { name: f.name, data }); } catch (e) { UI.alert(e.message, { title: "Couldn't add " + f.name }); }
+      loadLib();
+    }
+  }
+  el('libdrop').onclick = () => el('libfile').click();
+  el('libfile').onchange = () => { addLibFiles([...el('libfile').files]); el('libfile').value = ''; };
+  ['dragover', 'dragenter'].forEach(ev => el('libdrop').addEventListener(ev, e => { e.preventDefault(); el('libdrop').classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => el('libdrop').addEventListener(ev, e => { e.preventDefault(); el('libdrop').classList.remove('over'); }));
+  el('libdrop').addEventListener('drop', e => addLibFiles([...e.dataTransfer.files]));
+  async function libSearch() {
+    const q = el('libq').value.trim(); if (!q) { el('libhits').innerHTML = ''; return; }
+    el('libhits').innerHTML = '<p class="hint">Searching…</p>';
+    try {
+      const r = await post('/api/library/search', { query: q });
+      el('libhits').innerHTML = r.hits.length ? '' : '<p class="hint">No matching passages.</p>';
+      for (const h of r.hits) { const d = document.createElement('div'); d.className = 'libhit'; d.innerHTML = '<b></b><p></p>'; d.querySelector('b').textContent = `${h.name} · passage ${h.passage} · ${Math.round(h.score * 100)}% match`; d.querySelector('p').textContent = h.text.slice(0, 420) + (h.text.length > 420 ? '…' : ''); el('libhits').appendChild(d); }
+    } catch (e) { el('libhits').innerHTML = ''; UI.alert(e.message, { title: 'Search failed' }); }
+  }
+  el('libgo').onclick = libSearch; el('libq').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); libSearch(); } };
 
   // ---------- live updates (sidebar history, model list, Ollama/job banner)
   setInterval(() => { if (!document.hidden) { loadList().catch(() => {}); if (document.activeElement !== el('model')) loadModels(); } }, 4000);

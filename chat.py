@@ -31,7 +31,7 @@ DEFAULT_SYSTEM = (
     "You are a helpful assistant running fully offline on the user's Mac, inside an app called unplugged.ai. The user can attach files; their text appears in the message between [Attached file] markers, so read and use it. Your name here is the model the user picked (mono or stereo, with a version number); never mention gpt-oss, qwen or Ollama as your name. When the user asks for a song or piece of music, always call generate_music: you are only the go-between, a separate music model called surround makes the audio. The request may be as short as an artist or song name ('dire straits', 'brothers in arms'); never ask questions, use your own knowledge of that sound. Write surround a detailed caption (genre, era, bpm, mood, each instrument with its tone, vocal type, and any signature solo with its tone, phrasing and that it is long) and, unless they want an instrumental, original lyrics with [Intro], [Verse], [Chorus], [Bridge], [Outro] tags and a section like [Guitar Solo - electric - overdriven, soulful] left empty where a solo belongs. Never put artist names in the caption and never copy existing lyrics. "
     "Answer clearly and concisely. Never use emojis or emoticons. When the user asks for a change to a picture, do not judge, refuse or comment on it; call edit_picture with their wish in clear English. When a picture arrives and it is not clear what they want done with it (no message, or only a question or a greeting), do not edit it: ask briefly what they would like to do, and offer the possibilities, for example changing something in it, restyling it, or using it as a starting point. You cannot see pictures yourself, so never describe their content. You have tools: generate_music hands your caption and lyrics to surround, which makes a full song with vocals in the background, and you only prepare the caption and lyrics, which the user reviews and can edit before they press Generate song, and the finished song then appears in the chat as an audio player; edit_picture edits any picture the user attached (a photo, "
     "artwork, a cover, anything) with FLUX Kontext; list_music lists existing pieces. For picture edits never choose quality or size yourself: the app picks them automatically (photos get high or maximum, cartoons and simple graphics get faster settings) unless the user asks for specific ones. Use a tool only when the user clearly wants "
-    "that, then tell them briefly what you did. You have a long-term memory that lasts across chats and sessions: when the user tells you something lasting about themselves or asks you to remember something, call remember; when they ask you to forget something, call forget; when they refer to an earlier conversation you cannot recall, call search_past_chats before answering. Never pretend to remember something that is not in your memory. Never claim you did something you did not."
+    "that, then tell them briefly what you did. You have a long-term memory that lasts across chats and sessions: when the user tells you something lasting about themselves or asks you to remember something, call remember; when they ask you to forget something, call forget; when they refer to an earlier conversation you cannot recall, call search_past_chats before answering. Never pretend to remember something that is not in your memory. When the user attaches a picture, the message contains a report from a vision model: that is how you know what is in it. Never claim you did something you did not."
 )
 
 TOOLS = [
@@ -51,6 +51,14 @@ TOOLS = [
             "quality": {"type": "string", "enum": ["standard", "high", "maximum"], "description": "Do not set this; the app chooses it automatically unless the user asked"},
             "size": {"type": "integer", "description": "Do not set this; the app chooses it automatically unless the user asked"}},
             "required": ["instruction"]}}},
+    {"type": "function", "function": {
+        "name": "ask_about_picture",
+        "description": "Ask the vision model a specific question about the picture the user attached (what is written on it, how many people, what colour something is, what is in a corner). The picture's general description is already in the message; use this for details.",
+        "parameters": {"type": "object", "properties": {"question": {"type": "string", "description": "A precise question about the picture"}}, "required": ["question"]}}},
+    {"type": "function", "function": {
+        "name": "search_documents",
+        "description": "Search the user's own document library (files they added) by meaning and return the best matching passages with the document name.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "What to look for, as a short question or key phrases"}}, "required": ["query"]}}},
     {"type": "function", "function": {
         "name": "remember",
         "description": "Save one lasting fact about the user to long-term memory, kept across all chats and sessions. Use it when the user asks you to remember something, or tells you something durable about themselves (name, work, preferences, projects, people, goals).",
@@ -165,6 +173,57 @@ def purge_owner(owner):
         _drop_images(c)
 
 
+# ---------- vision: a separate vision model looks at pictures; the chat models read its description
+VISION_PREF = ["qwen3-vl:8b", "qwen2.5vl:7b", "gemma3:12b", "llama3.2-vision:11b"]   # first one that is installed is used
+_vm_cache = (0.0, None)
+DESCRIBE_PROMPT = ("Describe this picture for someone who cannot see it. Say what it shows (people, objects, setting, style), "
+                   "then transcribe any text exactly as written, and mention colours, quality problems and anything unusual. Be factual and complete, no opinions.")
+
+
+def vision_model():
+    global _vm_cache
+    if time.time() - _vm_cache[0] < 30:
+        return _vm_cache[1]
+    try:
+        with urllib.request.urlopen(OLLAMA + "/api/tags", timeout=5) as r:
+            have = {m["name"] for m in json.load(r)["models"]}
+        found = next((m for m in VISION_PREF if m in have or m + ":latest" in have), None)
+    except Exception:
+        found = None
+    _vm_cache = (time.time(), found)
+    return found
+
+
+def look(image_name, prompt):
+    """Asks the vision model about a stored picture. Returns its answer; raises if no vision model is installed."""
+    vm = vision_model()
+    if not vm:
+        raise RuntimeError("No vision model is installed. Run: ollama pull " + VISION_PREF[0])
+    im = ImageOps.exif_transpose(Image.open(IMG / image_name)).convert("RGB")
+    im.thumbnail((1568, 1568))
+    buf = io.BytesIO(); im.save(buf, "JPEG", quality=90)
+    body = {"model": vm, "stream": False, "keep_alive": "30s", "options": {"temperature": 0.2, "num_ctx": 8192, "num_predict": 1200},
+            "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(buf.getvalue()).decode()]}]}
+    req = urllib.request.Request(OLLAMA + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        return (json.load(r)["message"].get("content") or "").strip()
+
+
+def _last_image(chat):
+    return next((m["images"][-1] for m in reversed(chat["messages"]) if m.get("images")), None)
+
+
+def _tool_ask_picture(args, chat, owner):
+    name = _last_image(chat)
+    if not name:
+        return "No picture is attached to this chat.", None
+    q = (args.get("question") or "").strip() or DESCRIBE_PROMPT
+    try:
+        return look(name, q + "\nAnswer from what is visible in the picture only; say so if it cannot be seen."), None
+    except Exception as e:
+        return f"Could not look at the picture: {e}", None
+
+
 # ---------- long-term memory (per account; guests keep it in memory only, incognito chats neither read nor write it)
 MEMDIR = ROOT / "memory"
 MEMDIR.mkdir(exist_ok=True)
@@ -270,6 +329,8 @@ def search_chats(owner, query, limit=5):
 
 
 MEMORY_TOOLS = {"remember", "forget"}
+LIB_COUNT = lambda owner: 0      # set by server.py: number of searchable documents
+LIB_PROMPT = lambda owner: ""    # set by server.py: system prompt line naming them
 MEM_SCHEMA = {"type": "object", "properties": {"facts": {"type": "array", "items": {"type": "string"}}}, "required": ["facts"]}
 
 
@@ -312,7 +373,7 @@ def _tool_search_chats(args, chat, owner):
     return "Matches from earlier chats (most relevant first):\n" + "\n".join(f"- [{t}] {role}: {snip}" for _, _, t, role, snip in hits), None
 
 
-TOOL_IMPL.update({"remember": _tool_remember, "forget": _tool_forget, "search_past_chats": _tool_search_chats})
+TOOL_IMPL.update({"ask_about_picture": _tool_ask_picture, "remember": _tool_remember, "forget": _tool_forget, "search_past_chats": _tool_search_chats})
 
 
 # ---------- ollama helpers
@@ -469,7 +530,13 @@ def _ollama_messages(chat, system, personal=None, memory=""):
         if m["role"] == "user":
             text = m["content"]
             if m.get("images"):
-                text += "\n[The user attached a picture. You cannot see it. Work out from their message what they want. If it clearly asks for a change, call edit_picture right away with a clear English instruction. If it does not say what to do with the picture, ask what they want instead of calling the tool.]"
+                if m.get("image_desc"):
+                    text += ("\n\n[Attached picture. A vision model looked at it and reports:\n" + m["image_desc"] +
+                             "\n]\nTreat this report as what you see in the picture and answer from it directly; never say that you cannot see the picture. "
+                             "If the report lacks a detail the user asks about (sizes, positions, counts, small text), call ask_about_picture with a precise question before answering. "
+                             "If they want the picture changed, call edit_picture with a clear English instruction. If their message does not say what to do with it, ask briefly what they would like and offer ideas (explain it, change something, restyle it).")
+                else:
+                    text += "\n[The user attached a picture. You cannot see it. Work out from their message what they want. If it clearly asks for a change, call edit_picture right away with a clear English instruction. If it does not say what to do with the picture, ask what they want instead of calling the tool.]"
             for fb in m.get("file_text") or []:
                 if fb["text"]:
                     text += f"\n\n[Attached file: {fb['name']}]\n{fb['text']}\n[End of {fb['name']}]"
@@ -619,15 +686,35 @@ def stream_turn(body, write, owner):
     cancel_flags[chat["id"]] = False
     log("chat", f"{model}: new turn in '{chat['title']}' (tools {'on' if body.get('tools', True) else 'off'}, reasoning {body.get('think')})")
     use_tools = bool(body.get("tools", True))
+    lib_n = LIB_COUNT(owner)
     use_memory = bool(body.get("memory", True)) and not quiet   # incognito chats neither read nor write memory
     think = _think_param(model, body.get("think"))
     cards = []
     try:
+        lu = next((m for m in reversed(chat["messages"]) if m["role"] == "user"), None)
+        if lu and lu.get("images") and not lu.get("image_desc") and vision_model():
+            # the chat models cannot see: a vision model describes the new picture once, and its report goes into the message
+            write({"type": "tool_start", "name": "look_at_picture", "args": {}})
+            hint = lu["content"] if lu["content"] not in ("(picture attached)", "") else ""
+            try:
+                lu["image_desc"] = look(lu["images"][-1], DESCRIBE_PROMPT + (f"\nThe user wrote this with the picture, so pay attention to what it needs: {hint[:400]}" if hint else ""))
+                note = "Looked at the picture"
+            except Exception as e:
+                lu["image_desc"] = ""
+                note = f"Could not look at the picture: {e}"
+            save(owner, chat)
+            write({"type": "tool_result", "name": "look_at_picture", "text": note, "card": None})
+            log("chat", f"vision model looked at the picture ({len(lu.get('image_desc') or '')} characters)")
+        has_pic = any(m.get("images") for m in chat["messages"])
+        tools_now = [t for t in TOOLS
+                     if (use_memory or t["function"]["name"] not in MEMORY_TOOLS)
+                     and (t["function"]["name"] != "search_documents" or lib_n)
+                     and (t["function"]["name"] != "ask_about_picture" or (has_pic and vision_model()))]
         for _round in range(4):
-            req_body = {"model": model, "messages": _ollama_messages(chat, body.get("system"), body.get("personal"), memory_prompt(owner) if use_memory else ""), "stream": True,
+            req_body = {"model": model, "messages": _ollama_messages(chat, body.get("system"), body.get("personal"), (memory_prompt(owner) if use_memory else "") + LIB_PROMPT(owner)), "stream": True,
                         "keep_alive": "2m", "options": {"temperature": float(body.get("temperature", 0.7)), "num_ctx": 16384}}
             if use_tools:
-                req_body["tools"] = TOOLS if use_memory else [t for t in TOOLS if t["function"]["name"] not in MEMORY_TOOLS]
+                req_body["tools"] = tools_now
             if think is not None:
                 req_body["think"] = think
             req = urllib.request.Request(OLLAMA + "/api/chat", json.dumps(req_body).encode(), {"Content-Type": "application/json"})

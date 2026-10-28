@@ -112,6 +112,7 @@
     <button data-tab="chat" class="on"><i data-i="message"></i> Chat</button>
     <button data-tab="music"><i data-i="music"></i> Music</button>
     <button data-tab="cover"><i data-i="image"></i> Pictures</button>
+    <button data-tab="library"><i data-i="library"></i> Library</button>
     <button data-tab="console"><i data-i="terminal"></i> Console</button>
   </nav>
   <div class="hist" id="hist"></div>
@@ -208,6 +209,17 @@
   </div>
 </main>
 
+
+<main id="tab-library" style="display:none">
+  <section class="card libwrap">
+    <h2>Library <span class="hint" style="font-weight:400">your own documents, searchable by the chat models</span></h2>
+    <p class="hint" id="lib-hint">Add PDFs, Word files, notes or code. They are split into passages and indexed on this Mac; nothing is uploaded anywhere. In a chat, ask about them (for example "what does my contract say about notice periods?") and the model searches them and names the file.</p>
+    <div class="drop libdrop" id="libdrop">Drop files here, or click to choose<input type="file" id="libfile" multiple hidden></div>
+    <div class="libsearch"><input id="libq" placeholder="Search your documents (finds passages by meaning)"><button type="button" id="libgo">Search</button></div>
+    <div id="libhits"></div>
+    <div class="liblist" id="liblist"></div>
+  </section>
+</main>
 
 <main id="tab-console" style="display:none">
   <section class="card conwrap">

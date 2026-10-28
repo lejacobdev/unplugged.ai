@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 import auth
 import chat
+import library
 import imgedit
 import logbus
 import surround
@@ -151,12 +152,23 @@ def tool_list_music(args, chat_obj, owner):
     return json.dumps([{"id": s["id"], "seconds": s.get("seconds"), "caption": s.get("caption", "")[:120]} for s in items][:20]), None
 
 
+def tool_search_documents(args, chat_obj, owner):
+    hits = library.search(owner, args.get("query", ""))
+    if not hits:
+        return "The user's library has no passages for that. Say so; do not guess.", None
+    return "Passages from the user's documents (best first):\n\n" + "\n\n".join(f"[{h['name']}, passage {h['passage']}, relevance {h['score']}]\n{h['text']}" for h in hits), None
+
+
+chat.LIB_COUNT = library.count
+chat.LIB_PROMPT = library.prompt_block
+chat.TOOL_IMPL.update({"search_documents": tool_search_documents})
 chat.TOOL_IMPL.update({"generate_music": tool_generate_music, "edit_picture": tool_edit_picture, "list_music": tool_list_music})
 
 
 def purge_guest(owner):
     """A guest session ended: delete everything it created."""
     chat.purge_owner(owner)
+    library.purge_owner(owner)
     imgedit.purge_owner(owner)
     logbus.purge(owner["uid"])
     for t in list(owner.get("temp_files", [])):
@@ -309,6 +321,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, chat.status())
             if u.path == "/api/memory":
                 return self.send(200, {"items": chat.mem_load(o)})
+            if u.path == "/api/library":
+                return self.send(200, {"items": library.list_docs(o), "vision": chat.vision_model(), "embed": library.EMBED_MODEL})
             if u.path == "/api/chat/list":
                 return self.send(200, chat.list_chats(o))
             if u.path == "/api/chat/get":
@@ -384,7 +398,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/img/cancel":
             imgedit.cancel(o, parse_qs(urlparse(self.path).query).get("id", [""])[0])
             return self.send(200, {"ok": True})
-        if path.startswith("/api/chat/") or path == "/api/memory":
+        if path.startswith("/api/chat/") or path in ("/api/memory", "/api/library", "/api/library/search"):
             return self.chat_post(path)
         if path == "/api/music/prompt":
             try:
@@ -487,6 +501,16 @@ class Handler(BaseHTTPRequestHandler):
             body = self.body_json()
             if path == "/api/chat/new":
                 return self.send(200, chat.new_chat(o, body.get("model"), bool(body.get("incognito"))))
+            if path == "/api/library":
+                import base64 as b64
+                name = Path(str(body.get("name") or "file")).name[:120] or "file"
+                data = b64.b64decode(str(body.get("data") or "").split(",", 1)[-1])
+                if len(data) > chat.MAX_FILE_BYTES:
+                    raise ValueError("That file is larger than 25 MB.")
+                library.add(o, name, data)
+                return self.send(200, {"items": library.list_docs(o)})
+            if path == "/api/library/search":
+                return self.send(200, {"hits": library.search(o, str(body.get("query", "")))})
             if path == "/api/memory":
                 it = chat.mem_add(o, body.get("text", ""), "manual")
                 return self.send(200, {"items": chat.mem_load(o), "added": bool(it)})
@@ -530,6 +554,9 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
+            if u.path == "/api/library":
+                library.delete(o, q.get("id", ""))
+                return self.send(200, {"items": library.list_docs(o)})
             if u.path == "/api/memory":
                 chat.mem_clear(o) if q.get("all") else chat.mem_delete(o, q.get("id"))
                 return self.send(200, {"items": chat.mem_load(o)})
