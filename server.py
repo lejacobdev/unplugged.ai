@@ -578,6 +578,12 @@ def serve():
         s.socket = ctx.wrap_socket(s.socket, server_side=True)
         servers.append(s)
         msg += f"  |  secure (for the iPhone app): https://{HOSTNAME}.local:{TLS_PORT}"
+    try:   # "localhost" resolves to ::1 first in some browsers; listen there too so it never says not found
+        class V6Server(ThreadingHTTPServer):
+            address_family = socket.AF_INET6
+        servers.append(V6Server(("::1", PORT), Handler))
+    except OSError:
+        pass
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()
     print(msg + "  (Ctrl+C to stop)", flush=True)

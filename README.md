@@ -120,7 +120,11 @@ The repository still contains the earlier experiment (a small GPT trained on MID
 ./start.sh
 ```
 
-Open **http://127.0.0.1:8000**. Create an account (the first thing you see is the sign-in page) or continue as a guest.
+Open **http://127.0.0.1:8000** (or http://localhost:8000). Create an account (the first thing you see is the sign-in page) or continue as a guest.
+
+To have it start by itself at login and restart if it stops, run `./setup_autostart.sh` once (`./setup_autostart.sh remove` undoes it). Without that, the app only runs while `./start.sh` is running in a terminal; if that stops, the address shows "not found".
+
+On the Mac itself nothing needs the internet or Wi-Fi: the page, the chat models and the draft writing were tested with all non-local network connections blocked. Music and picture generation were **not** tested that way. The `.local` and LAN addresses printed for the phone do need a network.
 
 ---
 
@@ -173,7 +177,7 @@ web/   index.html  chat.js  ui.js  hl.js  store.js  app.css  sw.js  manifest.web
 | `surround.py`, `surround_worker.py` | Starts and talks to the surround music model (ACE-Step 1.5) |
 | `train.py`, `finetune_lora.py`, `generate.py`, `clean_midi.py`, `prep_tokens.py`, `rank_songs.py` | Earlier MIDI experiment, not used by the app |
 | `gen_icons.py` | Draws the app icons and logo |
-| `setup_https.sh`, `setup_image_model.sh`, `setup_surround.sh` | One-time helpers |
+| `setup_https.sh`, `setup_image_model.sh`, `setup_surround.sh`, `setup_autostart.sh` | One-time helpers |
 
 ## Troubleshooting
 
