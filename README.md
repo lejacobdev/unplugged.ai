@@ -2,7 +2,7 @@
 
 <p align="center">
 <b>Your own private AI that runs entirely on your Mac.</b><br>
-Chat with a local language model, write piano + electric guitar music with a model you train yourself,<br>
+Chat with a local language model, make songs with an offline music model,<br>
 and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothing ever leaves your computer.
 </p>
 
@@ -19,9 +19,9 @@ and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothin
 
 | | |
 |---|---|
-| **Chat** | A chatbot interface with two models: **stereo 2** (the stronger reasoning model, `gpt-oss:20b`) and **mono 2** (the lighter model, `qwen3:14b`). Both are the original Ollama models under app names; fine-tuned versions are planned and not available yet. Reasoning effort switch, tool calling, markdown, chat history, incognito chats. Attach files to a message: plain text and code files and Word (.docx) files were tested with both models; PDF, PowerPoint and Excel reading is implemented but untested. Binary files are accepted but the model says it cannot read them. |
-| **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Ask for a piece in the chat and it appears there as a player with a piano roll, preview and MIDI downloads (both chat models can do this); the Music tab has a prompt box with a model picker (the chosen model reads your request) and advanced sliders. Name an artist or song and the piece starts from the opening of a real piece by them in your local training library, then continues as new music; if nobody by that name is in the library you get a general piece and are told so. |
-| **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
+| **Chat** | A chatbot interface with two models: **stereo** (the stronger reasoning model, `gpt-oss:20b`) and **mono** (the lighter model, `qwen3:14b`). Both are the original Ollama models under app names; fine-tuned versions are planned and not available yet. Reasoning effort switch, tool calling, markdown with code blocks that have a language label and a copy button, chat history, incognito chats, and a **Settings** dialog (gear icon next to the theme switch) with General options and Personalization (your name and custom instructions, stored in the browser on this device and sent to the model as instructions). The "+" button opens a menu for attaching files and pictures. Confirmations and rename prompts are in-app dialogs, not browser popups. Attach files to a message: plain text and code files and Word (.docx) files were tested with both models; PDF, PowerPoint and Excel reading is implemented but untested. Binary files are accepted but the model says it cannot read them. |
+| **Music** | A third model, **surround**, makes the music: [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5), an open text-to-song model that writes audio, with vocals when there are lyrics. mono and stereo never make sound; they write a caption and lyrics from your request and hand them to surround. Nothing is generated blindly: ask for a song in the chat (even just an artist or song name) and the model fills in an editable caption and lyrics draft; you review or edit them and press **Generate song**, and the finished song appears as an audio player with a `.wav` download. The Music tab has the same draft fields, a length choice, and a magic wand inside the idea, caption and lyrics fields that asks the chosen model to write that field. A **Stop generating** button cancels a song (tested only while the model was loading; stopping in the middle of composing is untested). The models' knowledge of specific songs is imperfect, so a request such as "like Brothers in Arms" can come out as a different style. Measured on the developer's M5 Pro (24 GB): a 60-second song took about 93 s to generate with the model loaded, and about 164 s for the first song after the app started (model loading included). Longer songs and sound quality are not benchmarked here; judge the output yourself. |
+| **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Attach a picture in the chat: the chat model (which cannot see images) works out from your message what you want; if you say what to change it starts the edit, and if you only send the picture or an unclear message it asks what you would like to do (this picture-intent behaviour was changed last and has not been tested with a real picture yet). |
 | **Console** | A live log of everything the models are doing. |
 | **Accounts** | Per-user history and settings, guest mode that deletes everything when you leave, incognito chats. |
 | **iPhone** | Use it from the phone's browser; the Mac does the computing. Home-screen install and the offline shell are built but **not yet tested on a real iPhone**. |
@@ -34,12 +34,23 @@ and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothin
 <img src="docs/img/desktop-music.png" width="49%" alt="Music">
 <img src="docs/img/desktop-cover.png" width="49%" alt="Pictures">
 </p>
+<p align="center">
+<img src="docs/img/desktop-settings.png" width="49%" alt="Settings">
+<img src="docs/img/desktop-personalization.png" width="49%" alt="Personalization">
+</p>
+<p align="center">
+<img src="docs/img/desktop-plus-menu.png" width="49%" alt="Attach menu">
+<img src="docs/img/desktop-console.png" width="49%" alt="Console">
+</p>
+
+<sub>The screenshots use sample text typed in for the demo (the chat and music draft shown were not generated by the models, and no song was made for them). They were taken from a guest session.</sub>
 
 <p align="center">
 <img src="docs/img/phone-chat.png" width="22%" alt="Phone chat">
 <img src="docs/img/phone-drawer.png" width="22%" alt="Phone menu">
 <img src="docs/img/phone-music.png" width="22%" alt="Phone music">
 <img src="docs/img/phone-models.png" width="22%" alt="Phone model switch">
+<img src="docs/img/phone-settings.png" width="22%" alt="Phone settings">
 </p>
 
 ---
@@ -48,7 +59,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothin
 
 * A Mac with **Apple Silicon**. Developed and tested only on an M5 Pro with 24 GB. Other configurations are untested.
 * macOS, **Homebrew**, **Python 3.11** and **Python 3.12**, **Ollama**, **git**.
-* About **80 GB** of free disk: models (~25 GB), picture model download + 8-bit copy (~50 GB while converting), music training data (~2 GB).
+* About **90 GB** of free disk: models (~25 GB), picture model download + 8-bit copy (~50 GB while converting), surround music model (~10 GB).
 * A free Hugging Face account (to accept the FLUX.1 Kontext license). The FLUX license is **non-commercial**.
 * Internet only for the one-time downloads. After that everything runs offline.
 
@@ -66,8 +77,8 @@ cd unplugged.ai
 ```bash
 brew install ollama
 ollama serve &              # or open the Ollama app
-ollama pull gpt-oss:20b     # shown in the app as "stereo 2"
-ollama pull qwen3:14b       # shown in the app as "mono 2"
+ollama pull gpt-oss:20b     # shown in the app as "stereo"
+ollama pull qwen3:14b       # shown in the app as "mono"
 ```
 
 The app shows its own names. To change the version number or swap a model, edit `MODEL_VERSION` and `MODEL_FAMILY` at the top of [`chat.py`](chat.py).
@@ -78,7 +89,7 @@ The app shows its own names. To change the version number or swap a model, edit 
 brew install python@3.11 python@3.12
 
 python3.11 -m venv .venv
-.venv/bin/pip install -r requirements-music.txt
+.venv/bin/pip install -r requirements-music.txt   # the web server's own packages
 
 python3.12 -m venv .venv-img
 .venv-img/bin/pip install -r requirements-image.txt
@@ -92,31 +103,15 @@ python3.12 -m venv .venv-img
 
 It walks you through accepting the license, logging in to Hugging Face, downloading FLUX.1 Kontext [dev] and saving an 8-bit copy in `models/kontext-q8` (about 12 GB). Safe to stop and re-run.
 
-### 5. Music model (optional, a few hours of training)
-
-The music model is a small GPT trained from scratch on piano and electric-guitar MIDI. The default model is **general**: it is trained on a broad mix of music and is not tuned to anyone's taste, so it works for everyone.
+### 5. Music model, surround (optional, ~10 GB download)
 
 ```bash
-mkdir -p data && cd data
-
-# general pretraining data: Lakh MIDI "clean" and MAESTRO v3
-curl -L -O http://hog.ecs.columbia.edu/craffel/lmd/clean_midi.tar.gz
-mkdir -p lakh && tar -xzf clean_midi.tar.gz -C lakh
-curl -L -O https://storage.googleapis.com/magenta-data/datasets/maestro/v3.0.0/maestro-v3.0.0-midi.zip
-mkdir -p base_midi && unzip -q maestro-v3.0.0-midi.zip -d base_midi
-cd ..
-
-# clean -> tokenize -> pretrain (writes ckpt/base, the general model)
-caffeinate -dimsu ./run_all.sh
+./setup_surround.sh
 ```
 
-`run_all.sh` is resumable: stop it any time and run it again. Defaults are 230 minutes of pretraining (`BASE_MIN`) and a personal fine-tuning stage (`LORA_MIN`, see below). Keep the Mac plugged in; on battery it throttles hard. The app uses `ckpt/base` unless you set `UNPLUGGED_MUSIC_CKPT=/path/to/other/checkpoint`.
+This clones [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5) into `vendor/ACE-Step-1.5`, installs it in its own environment with [uv](https://docs.astral.sh/uv/) (`brew install uv`) and downloads the weights (the turbo model, the 1.7B planning language model and the audio decoder; about 10 GB). The setup script itself has not been run from scratch on a clean machine; the manual equivalent (clone, `uv sync`, first generation downloads the weights) is what was tested. The app starts the model on the first song and stops it after 15 idle minutes to give the memory back. Until it is installed, the Music tab and the chat tool report that surround is not installed; everything else works.
 
-**Make it yours (optional).** The personal stage fine-tunes the general model on songs you choose. Copy [`examples/songs.example.md`](examples/songs.example.md) to `songs.md`, list your own songs, adjust the `CORE` table in [`clean_midi.py`](clean_midi.py), run `./run_all.sh` again and start the app with `UNPLUGGED_MUSIC_CKPT=ckpt/final`. In testing this changed held-out loss only slightly (3.134 to 3.094), so the general model is already close.
-
-Notes on the pipeline and results are in [docs/music-model-notes.md](docs/music-model-notes.md).
-
-Until a model exists in `ckpt/base`, the Music tab has nothing to generate with. Everything else still works.
+The repository still contains the earlier experiment (a small GPT trained on MIDI: `train.py`, `finetune_lora.py`, `generate.py`, `run_all.sh`). The app no longer uses it.
 
 ### 6. Start it
 
@@ -163,7 +158,7 @@ If the Mac is asleep or unreachable the app opens anyway and shows your saved ch
 browser / iPhone PWA  --HTTP(S)-->  server.py (Python stdlib)
                                        |-- chat.py     -> Ollama (stereo / mono), tool loop
                                        |-- imgedit.py  -> mflux (FLUX.1 Kontext, 8-bit)
-                                       |-- generate.py -> self-trained 35M GPT (piano + guitar MIDI)
+                                       |-- surround.py -> surround_worker.py in its own env -> ACE-Step 1.5 (songs as audio)
                                        |-- auth.py     -> accounts, sessions, per-user settings
                                        `-- logbus.py   -> live console
 web/   index.html  chat.js  ui.js  store.js  app.css  sw.js  manifest.webmanifest
@@ -174,10 +169,10 @@ web/   index.html  chat.js  ui.js  store.js  app.css  sw.js  manifest.webmanifes
 | `server.py` | HTTP/HTTPS server, routes, tools the chat model can call (music, pictures) |
 | `chat.py` | Chat storage, streaming, model names (`MODEL_VERSION`, `MODEL_FAMILY`) |
 | `imgedit.py` | Picture jobs, quality auto-pick, LoRAs, live preview |
-| `train.py`, `finetune_lora.py`, `generate.py` | Music model training and sampling |
-| `clean_midi.py`, `prep_tokens.py`, `rank_songs.py` | Data preparation |
+| `surround.py`, `surround_worker.py` | Starts and talks to the surround music model (ACE-Step 1.5) |
+| `train.py`, `finetune_lora.py`, `generate.py`, `clean_midi.py`, `prep_tokens.py`, `rank_songs.py` | Earlier MIDI experiment, not used by the app |
 | `gen_icons.py` | Draws the app icons and logo |
-| `setup_https.sh`, `setup_image_model.sh` | One-time helpers |
+| `setup_https.sh`, `setup_image_model.sh`, `setup_surround.sh` | One-time helpers |
 
 ## Troubleshooting
 
@@ -195,4 +190,5 @@ web/   index.html  chat.js  ui.js  store.js  app.css  sw.js  manifest.webmanifes
 * Code: MIT (see `LICENSE`).
 * [FLUX.1 Kontext [dev]](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev) by Black Forest Labs: non-commercial license. Run through [mflux](https://github.com/filipstrand/mflux).
 * [gpt-oss](https://ollama.com/library/gpt-oss) and [Qwen3](https://ollama.com/library/qwen3) via [Ollama](https://ollama.com).
-* Training data: [Lakh MIDI](https://colinraffel.com/projects/lmd/) (CC BY 4.0) and [MAESTRO](https://magenta.tensorflow.org/datasets/maestro) (CC BY-NC-SA 4.0). The datasets are not included in this repository, and neither are any trained weights.
+* Music: [ACE-Step 1.5](https://github.com/ACE-Step/ACE-Step-1.5) (code under MIT per its repository; check the model card on Hugging Face for the weights' terms before commercial use). Not included in this repository.
+* Training data for the earlier MIDI experiment: [Lakh MIDI](https://colinraffel.com/projects/lmd/) (CC BY 4.0) and [MAESTRO](https://magenta.tensorflow.org/datasets/maestro) (CC BY-NC-SA 4.0). The datasets are not included in this repository, and neither are any trained weights.

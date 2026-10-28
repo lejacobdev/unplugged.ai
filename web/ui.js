@@ -31,11 +31,17 @@
         it.onclick = () => { sel.selectedIndex = i; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); sync(); closeMenu(); btn.focus(); };
         menu.appendChild(it);
       });
-      document.body.appendChild(menu);
+      (btn.closest('dialog') || document.body).appendChild(menu);  // inside an open dialog, or it would sit under the dialog (top layer)
       const r = btn.getBoundingClientRect(), mh = Math.min(menu.scrollHeight, 320), below = innerHeight - r.bottom - 12, up = below < mh && r.top > below;
       menu.style.minWidth = r.width + 'px'; menu.style.left = Math.max(8, Math.min(r.left, innerWidth - Math.max(r.width, 200) - 8)) + 'px';
       menu.style.maxHeight = Math.max(140, Math.min(320, up ? r.top - 12 : below)) + 'px';
       if (up) menu.style.bottom = (innerHeight - r.top + 6) + 'px'; else menu.style.top = (r.bottom + 6) + 'px';
+      if (menu.parentNode !== document.body) {  // a dialog can be the containing block for fixed children: shift by however far the menu landed from where it was meant to be
+        const m = menu.getBoundingClientRect(), wantTop = up ? r.top - 6 - m.height : r.bottom + 6, wantLeft = Math.max(8, Math.min(r.left, innerWidth - Math.max(r.width, 200) - 8));
+        const dx = wantLeft - m.left, dy = wantTop - m.top;
+        if (Math.abs(dx) > 1) menu.style.left = (parseFloat(menu.style.left) + dx) + 'px';
+        if (Math.abs(dy) > 1) { if (up) menu.style.bottom = (parseFloat(menu.style.bottom) - dy) + 'px'; else menu.style.top = (parseFloat(menu.style.top) + dy) + 'px'; }
+      }
       btn.setAttribute('aria-expanded', 'true'); root.classList.add('open'); openDD = { menu, btn, root, sel };
       menu.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
     }
@@ -65,4 +71,43 @@
   // programmatic changes (code setting .value) don't fire events: keep the custom controls in step
   setInterval(() => { document.querySelectorAll('select[data-dd]').forEach(s => s._ddSync && s._ddSync()); document.querySelectorAll('input[type=range][data-rg]').forEach(paintRange); }, 400);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan()); else scan();
+})();
+
+// In-app dialogs that replace the browser's prompt(), confirm() and alert(). Each returns a promise.
+//   UI.confirm(message, {title, ok, danger})  -> true / false
+//   UI.alert(message, {title})                -> resolves when closed
+//   UI.prompt(title, {value, label, ok, type, message, placeholder}) -> string, or null when cancelled
+window.UI = (function () {
+  function open(o) {
+    return new Promise(resolve => {
+      const d = document.createElement('dialog'); d.className = 'askdlg';
+      const form = document.createElement('form'); form.method = 'dialog';
+      const h = document.createElement('h3'); h.textContent = o.title || ''; if (o.title) form.appendChild(h);
+      if (o.message) { const p = document.createElement('p'); p.textContent = o.message; form.appendChild(p); }
+      let inp = null;
+      if (o.input) {
+        if (o.label) { const l = document.createElement('label'); l.textContent = o.label; form.appendChild(l); }
+        inp = document.createElement('input'); inp.type = o.type || 'text'; inp.value = o.value || ''; inp.placeholder = o.placeholder || '';
+        inp.autocomplete = o.type === 'password' ? 'off' : 'on'; form.appendChild(inp);
+      }
+      const row = document.createElement('div'); row.className = 'askrow';
+      let cancel = null;
+      if (!o.noCancel) { cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel'; row.appendChild(cancel); }
+      const ok = document.createElement('button'); ok.type = 'submit'; ok.className = 'primary' + (o.danger ? ' danger' : ''); ok.textContent = o.ok || 'OK'; row.appendChild(ok);
+      form.appendChild(row); d.appendChild(form); document.body.appendChild(d);
+      let result = o.input ? null : false, settled = false;
+      const end = () => { if (settled) return; settled = true; d.close(); d.remove(); resolve(result); };
+      form.onsubmit = e => { e.preventDefault(); result = o.input ? inp.value : true; end(); };
+      if (cancel) cancel.onclick = () => { result = o.input ? null : false; end(); };
+      d.addEventListener('cancel', e => { e.preventDefault(); result = o.input ? null : false; end(); });
+      d.addEventListener('click', e => { if (e.target === d && cancel) { result = o.input ? null : false; end(); } });
+      d.showModal();
+      if (inp) { inp.focus(); inp.select(); } else ok.focus();
+    });
+  }
+  return {
+    confirm: (message, o = {}) => open({ title: o.title || 'Are you sure?', message, ok: o.ok || 'OK', danger: o.danger }),
+    alert: (message, o = {}) => open({ title: o.title || '', message, ok: 'OK', noCancel: true }).then(() => {}),
+    prompt: (title, o = {}) => open({ title, input: true, ...o }),
+  };
 })();

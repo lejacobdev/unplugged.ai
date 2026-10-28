@@ -1,4 +1,4 @@
-"""Local dashboard for the piano + guitar MIDI model.
+"""unplugged.ai server: chat, music (surround) and picture editing, all on this Mac.
 
     .venv/bin/python server.py          then open http://127.0.0.1:8000
 
@@ -17,29 +17,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import torch
-from symusic import Score
-from transformers import GPT2LMHeadModel
 
 import auth
 import chat
 import imgedit
 import logbus
-from common import ROOT, make_tokenizer
+import surround
 
-# The general model (trained on piano + electric guitar MIDI for everyone). Point UNPLUGGED_MUSIC_CKPT at a personal fine-tune to use that instead.
-CKPT = Path(os.environ.get("UNPLUGGED_MUSIC_CKPT", "")) if os.environ.get("UNPLUGGED_MUSIC_CKPT") else ROOT / "ckpt/base"
-FEATURED = ROOT / "out"
-MINE = ROOT / "dashboard_samples"
+ROOT = Path(__file__).parent
+
+MINE = ROOT / "dashboard_samples"   # songs made by surround: <name>.wav + <name>.json (owner, caption, lyrics, ...)
 WEB = ROOT / "web"
-PIANO, GUITAR = {0, 4}, {27, 29}
 NAME_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 MINE.mkdir(exist_ok=True)
-
-tok = make_tokenizer()
-model = GPT2LMHeadModel.from_pretrained(CKPT).eval()
-SPECIAL = {tok["BOS_None"], tok["EOS_None"], tok["PAD_None"]}
-gen_lock = threading.Lock()
 jobs = {}
 
 
@@ -53,236 +43,77 @@ def _meta(p: Path):
 
 def resolve(sample_id: str, owner=None) -> Path:
     kind, _, name = sample_id.partition("/")
-    if kind not in ("featured", "mine") or not NAME_RE.match(name):
+    if kind != "mine" or not NAME_RE.match(name):
         raise ValueError("bad sample id")
-    p = (FEATURED if kind == "featured" else MINE) / f"{name}.mid"
-    if not p.exists() or (kind == "mine" and owner is not None and _meta(p).get("owner") != owner["uid"]):
+    p = MINE / f"{name}.wav"
+    if not p.exists() or (owner is not None and _meta(p).get("owner") != owner["uid"]):
         raise FileNotFoundError(sample_id)
     return p
 
 
-def part_of(program):
-    return "piano" if program in PIANO else "guitar" if program in GUITAR else "other"
-
-
-def describe(path: Path):
-    sc = Score(str(path)).to("second")
-    counts = {"piano": 0, "guitar": 0}
-    for t in sc.tracks:
-        counts[part_of(t.program)] = counts.get(part_of(t.program), 0) + len(t.notes)
-    return {"duration": round(sc.end(), 1), "piano": counts["piano"], "guitar": counts["guitar"]}
-
-
 def list_samples(owner):
     out = []
-    for kind, folder in (("mine", MINE), ("featured", FEATURED)):
-        for p in sorted(folder.glob("*.mid"), key=lambda q: q.stat().st_mtime, reverse=True):
-            if p.stem.endswith(("_piano", "_guitar")):
-                continue
-            meta = _meta(p)
-            if kind == "mine" and meta.get("owner") != owner["uid"]:
-                continue
-            meta.pop("owner", None)
-            try:
-                info = describe(p)
-            except Exception:
-                continue
-            out.append({"id": f"{kind}/{p.stem}", "name": p.stem, "kind": kind, "created": p.stat().st_mtime, **info, **meta})
+    for p in sorted(MINE.glob("*.wav"), key=lambda q: q.stat().st_mtime, reverse=True):
+        meta = _meta(p)
+        if meta.get("owner") != owner["uid"]:
+            continue
+        meta.pop("owner", None)
+        out.append({"id": f"mine/{p.stem}", "name": p.stem, "kind": "mine", "created": p.stat().st_mtime, **meta})
     return out
 
 
-def notes_json(path: Path):
-    sc = Score(str(path)).to("second")
-    tracks = {}
-    for t in sc.tracks:
-        part = part_of(t.program)
-        d = tracks.setdefault(part, {"name": part, "program": t.program, "notes": []})
-        d["notes"] += [[round(n.time, 3), round(n.duration, 3), n.pitch, n.velocity] for n in t.notes]
-    for d in tracks.values():
-        d["notes"].sort()
-    return {"duration": sc.end(), "tracks": list(tracks.values())}
-
-
-def midi_part(path: Path, part: str) -> bytes:
-    if part == "both":
-        return path.read_bytes()
-    want = PIANO if part == "piano" else GUITAR
-    sc = Score(str(path))
-    sc.tracks = [t for t in sc.tracks if t.program in want]
-    return bytes(sc.dumps_midi())
-
-
 def run_job(job_id, p):
+    """Background: asks surround for one song. mono/stereo already wrote the caption and lyrics."""
     job = jobs[job_id]
+    owner = p["owner"]
     try:
-        bos = [tok["BOS_None"]]
-        starts = []
-        for pp in (p.get("prompt_paths") or ([p["prompt_path"]] if p.get("prompt_path") else [])):
-            seq = tok(Score(str(pp)))
-            seq = seq[0] if isinstance(seq, list) else seq
-            starts.append(bos + list(seq.ids)[: int(p["prompt_tokens"])])
-        if not starts and p.get("continue_id"):
-            seq = tok(Score(str(resolve(p["continue_id"], p["owner"]))))
-            seq = seq[0] if isinstance(seq, list) else seq
-            starts.append(bos + list(seq.ids)[: int(p["prompt_tokens"])])
-        starts = starts or [bos]
-        start = starts[0]
-        want = int(p["count"])
-        tries = 0
-        rep = max(float(p["rep"]), 1.05)  # below this the model tends to loop on one token
-        n_tok = int(p["tokens"])
-        min_total, min_each = max(30, int(n_tok * 0.12)), max(12, int(n_tok * 0.05))
-        stuck = 0
-        with gen_lock:
-            while len(job["results"]) < want and tries < want * 8:
-                tries += 1
-                # a reference that keeps failing is swapped for another by the same artist; after four tries the piece is written without one
-                start = starts[(tries - 1) % len(starts)] if (tries <= 4 or not p.get("prompt_paths")) else bos
-                if start is bos and p.get("prompt_paths") and not job.get("note"):
-                    job["note"] = "Could not follow that style closely, so this is a general piece."
-                job["message"] = f"Composing sample {len(job['results']) + 1} of {want}…"
-                logbus.log("music", owner=p["owner"]["uid"], text=f"composing sample {len(job['results']) + 1}/{want}: up to {int(p['tokens'])} tokens, creativity {p['temp']}, variety {rep:.2f}" + (f", continuing {p['continue_id']}" if p.get("continue_id") else ""))
-                if p.get("seed") not in (None, ""):
-                    torch.manual_seed(int(p["seed"]) + tries - 1)
-                with torch.no_grad():
-                    y = model.generate(
-                        torch.tensor([start]), do_sample=True, temperature=float(p["temp"]),
-                        top_p=float(p["top_p"]), repetition_penalty=rep,
-                        max_new_tokens=max(50, min(int(p["tokens"]), 1023 - len(start))), pad_token_id=tok["PAD_None"], eos_token_id=tok["EOS_None"],
-                    )
-                ids = [t for t in y[0].tolist() if t not in SPECIAL]
-                try:
-                    score = tok.decode(ids)
-                except Exception:
-                    continue
-                n_p = sum(len(t.notes) for t in score.tracks if t.program in PIANO)
-                n_g = sum(len(t.notes) for t in score.tracks if t.program in GUITAR)
-                if n_p + n_g < min_total or (p.get("need_both") and min(n_p, n_g) < min_each):
-                    stuck += 1
-                    logbus.log("music", owner=p["owner"]["uid"], text=f"try {tries}: unusable ({n_p} piano / {n_g} guitar notes, looping or too sparse); raising variety and retrying")
-                    rep = min(rep + 0.04, 1.3)  # looping or too sparse: push harder against repetition next try
-                    continue
-                eph = bool(p.get("ephemeral")) or p["owner"]["kind"] == "guest"
-                name = ("tmp_" if eph else "") + time.strftime("gen_%m%d_%H%M%S") + f"_{len(job['results'])}"
-                if eph:
-                    p["owner"]["temp_files"].add("m:" + name)
-                path = MINE / f"{name}.mid"
-                score.dump_midi(str(path))
-                meta = {k: p[k] for k in ("temp", "top_p", "rep", "tokens")}
-                meta["continued_from"] = p.get("continue_id") or None
-                meta["owner"] = p["owner"]["uid"]
-                path.with_suffix(".json").write_text(json.dumps(meta))
-                job["results"].append(f"mine/{name}")
-                logbus.log("music", owner=p["owner"]["uid"], text=f"saved {name}.mid: {n_p} piano notes, {n_g} guitar notes")
+        eph = bool(p.get("ephemeral")) or owner["kind"] == "guest"
+        name = ("tmp_" if eph else "") + time.strftime("song_%m%d_%H%M%S") + "_" + job_id
+        if eph:
+            owner["temp_files"].add("m:" + name)
+        seconds = surround.LENGTH.get(p["length"], 120)
+        logbus.log("music", owner=owner["uid"], text=f"surround: composing about {seconds} s ({'with lyrics' if p['lyrics'].strip() else 'instrumental'}): {p['caption'][:120]}")
+        job["message"] = "Waiting for the music model" if surround.busy() else "Starting the music model"
+        t = time.time()
+        got = surround.compose(p["caption"], p["lyrics"], seconds, MINE / ".work", progress=lambda m: job.update(message=m), token=job_id, cancelled=lambda: bool(job.get("cancel")))
+        os.replace(got["path"], MINE / f"{name}.wav")
+        meta = {"caption": p["caption"], "lyrics": p["lyrics"], "length": p["length"], "seconds": seconds, "made_in": round(time.time() - t), "seed": got.get("seed"), "owner": owner["uid"]}
+        (MINE / f"{name}.json").write_text(json.dumps(meta))
+        job["results"].append(f"mine/{name}")
+        logbus.log("music", owner=owner["uid"], text=f"saved {name}.wav (took {meta['made_in']} s)")
         job["status"] = "done"
-        job["message"] = ("Done" + (". " + job["note"] if job.get("note") else "")) if job["results"] else ("No usable samples. The model kept looping or wrote too little, even after raising Variety automatically. " + ("Try a longer Length, or untick 'Require both'." if p.get("need_both") else "Try a longer Length and Creativity near 0.95."))
+        job["message"] = "Done"
+    except surround.Cancelled:
+        job["status"] = "cancelled"
+        job["message"] = "Stopped"
+        logbus.log("music", owner=owner["uid"], text="song stopped by the user")
     except Exception as e:
         job["status"] = "error"
         job["message"] = f"{type(e).__name__}: {e}"
+        logbus.log("music", owner=owner["uid"], text="surround failed: " + job["message"])
 
 
-# ---------- chat tools (the LLM can call these)
-# ---------- "in the style of ...": seed a new piece with the opening of a real piece by that artist from the local training library
-_style_index = None
-
-
-def _norm(t):
-    return re.sub(r"[^a-z0-9 ]+", "", re.sub(r"\s+", " ", t.lower().replace("&", " and ").replace("-", " "))).strip()
-
-
-def _build_style_index():
-    global _style_index
-    idx = []
-    for group in ("base_lakh", "mine_style", "mine_core"):
-        d = ROOT / "data/clean" / group
-        if d.exists():
-            for f in d.glob("*__*__*.mid"):
-                artist, title, _ = f.stem.split("__", 2) if f.stem.count("__") >= 2 else (f.stem, "", "")
-                idx.append((_norm(artist), _norm(title), artist, title, f))
-    _style_index = idx
-
-
-_FILLER = set("in the style of like a an some something song piece music tune track sounding that sounds similar to by from with and for me make create write compose give please".split())
-
-
-def find_style_reference(style):
-    """Returns (path, artist, title) of a library piece matching the requested artist/song, or None.
-    The artist (or song) name must make up at least half of what was asked, so unknown names are not matched by accident."""
-    if not style:
-        return None
-    if _style_index is None:
-        _build_style_index()
-    words = [w for w in _norm(style).split() if w not in _FILLER]
-    if not words:
-        return None
-    q = " " + " ".join(words) + " "
-    def covers(name):
-        n = name.split()
-        return len(name) >= 3 and " " + name + " " in q and len(n) / len(words) >= 0.5
-    by_title = [e for e in _style_index if len(e[1]) >= 4 and " " + e[1] + " " in q and (not e[0] or " " + e[0] + " " in q)]
-    by_artist = [e for e in _style_index if covers(e[0])]
-    hit = by_title or by_artist
-    if not hit:
-        return None
-    e = random.choice(hit)
-    return e[4], e[2], e[3]
-
-
-def style_candidates(style, n=5):
-    """Up to n library pieces matching the request that contain both piano and guitar (so the continuation can too)."""
-    first = find_style_reference(style)
-    if not first:
-        return []
-    words = [w for w in _norm(style).split() if w not in _FILLER]
-    q = " " + " ".join(words) + " "
-    pool = [e for e in _style_index if e[0] == _norm(first[1])] or [e for e in _style_index if e[4] == first[0]]
-    random.shuffle(pool)
-    out = []
-    for e in pool[:40]:
-        try:
-            sc = Score(str(e[4]))
-            progs = {t.program for t in sc.tracks if len(t.notes) > 10}
-            if progs & PIANO and progs & GUITAR:
-                out.append((e[4], e[2], e[3]))
-        except Exception:
-            continue
-        if len(out) >= n:
-            break
-    return out or [first]
-
-
-def start_music(owner, ephemeral, style="", length="medium", creativity="balanced", count=1, cont=None):
-    """Starts a background generation job. Returns (job id, reference or None)."""
-    tokens = {"short": 500, "medium": 800, "long": 1000}.get(length, 800)
-    temp, rep = {"safe": (0.9, 1.15), "balanced": (0.95, 1.12), "wild": (1.1, 1.12)}.get(creativity, (0.95, 1.12))
-    try:
-        if cont:
-            resolve(cont, owner)
-    except Exception:
-        cont = None
-    style = (style or "").strip()
-    cands = style_candidates(style) if style and not cont else []
-    ref = cands[0] if cands else None
-    count = max(1, min(int(count or 1), 4))
-    p = {"owner": owner, "ephemeral": bool(ephemeral), "count": count, "tokens": tokens, "temp": temp, "top_p": 0.95, "rep": rep, "need_both": True,
-         "prompt_tokens": 96 if ref else 64, "continue_id": cont, "prompt_path": str(ref[0]) if ref else None, "prompt_paths": [str(c[0]) for c in cands]}
+def start_music(owner, ephemeral, caption, lyrics="", length="medium"):
+    """Starts a background song job. Returns the job id."""
+    caption = (caption or "").strip()[:500]
+    if not caption:
+        raise ValueError("Describe the music you want first.")
+    p = {"owner": owner, "ephemeral": bool(ephemeral), "caption": caption, "lyrics": (lyrics or "").strip()[:4000],
+         "length": length if length in surround.LENGTH else "medium"}
     jid = uuid.uuid4().hex[:8]
-    jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "Starting the music model…", "results": [], "count": count, "started": time.time()}
+    jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "Starting the music model", "results": [], "count": 1, "started": time.time()}
     threading.Thread(target=run_job, args=(jid, p), daemon=True).start()
-    return jid, ref
+    return jid
 
 
 def tool_generate_music(args, chat_obj, owner):
-    style = (args.get("style") or "").strip()
-    jid, ref = start_music(owner, chat_obj.get("incognito"), style, args.get("length", "medium"), args.get("creativity", "balanced"), 1, args.get("continue_from") or None)
-    if ref:
-        how = f"It is seeded with the opening of a real piece by {ref[1]} from the local library ({ref[2]}) and then continues as new music. Say it is inspired by {ref[1]}, not a copy."
-    elif style:
-        how = f"There is nothing by '{style}' in the local music library, so this is a general piano + guitar piece, not in that style. Tell the user this honestly."
-    else:
-        how = ""
-    return ("Started composing one new piece. It appears in this chat as a player with a piano roll when it is ready (about 30 to 90 seconds). " + how +
-            " Tell the user briefly that it is being made. Do not describe the music yet, you have not heard it."), {"kind": "music_job", "job": jid}
+    """Does not start anything: shows the user an editable draft (caption + lyrics) in the chat; the song starts when they press Generate."""
+    caption = (args.get("caption") or args.get("style") or "").strip()
+    if not caption:
+        return "No caption was given. Call generate_music again with a caption describing the sound of the song.", None
+    length = args.get("length") if args.get("length") in surround.LENGTH else "medium"
+    return ("The caption and lyrics are now shown to the user in the chat as an editable draft. Nothing has been generated yet: the user reviews or edits them and presses Generate song. "
+            "Tell the user briefly that the draft is ready to review. Do not describe how it will sound."), {"kind": "music_draft", "caption": caption[:500], "lyrics": (args.get("lyrics") or "")[:4000], "length": length}
 
 
 def tool_edit_picture(args, chat_obj, owner):
@@ -293,9 +124,10 @@ def tool_edit_picture(args, chat_obj, owner):
         return "No picture is attached to this chat. Ask the user to drag a picture into the chat (or use the paperclip).", None
     import base64 as b64
     data = "data:image/png;base64," + b64.b64encode(imgedit.image_path(name).read_bytes()).decode()
-    # the user's own words go to FLUX unchanged: the language model neither rewrites nor reviews the request
     said = next((m["content"].strip() for m in reversed(chat_obj["messages"]) if m["role"] == "user"), "")
-    instruction = said if said and said != "(picture attached)" else args.get("instruction", "")
+    instruction = (args.get("instruction") or "").strip() or (said if said != "(picture attached)" else "")
+    if not instruction:
+        return "No instruction was given. Ask the user what they want changed in the picture.", None
     ask = next((m["content"].lower() for m in reversed(chat_obj["messages"]) if m["role"] == "user"), "")
     if re.search(r"highest|maximum|max settings|max quality|best (quality|settings)|ultra|as good as possible", ask):
         quality, size, why = "maximum", 1536, "you asked for the highest settings"
@@ -316,7 +148,7 @@ def tool_edit_picture(args, chat_obj, owner):
 
 def tool_list_music(args, chat_obj, owner):
     items = list_samples(owner)
-    return json.dumps([{"id": s["id"], "seconds": s["duration"], "piano_notes": s["piano"], "guitar_notes": s["guitar"]} for s in items][:20]), None
+    return json.dumps([{"id": s["id"], "seconds": s.get("seconds"), "caption": s.get("caption", "")[:120]} for s in items][:20]), None
 
 
 chat.TOOL_IMPL.update({"generate_music": tool_generate_music, "edit_picture": tool_edit_picture, "list_music": tool_list_music})
@@ -454,6 +286,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path in ("/manifest.webmanifest", "/offline.html"):
                 ctype = "application/manifest+json" if u.path.endswith("webmanifest") else "text/html; charset=utf-8"
                 return self.send(200, (WEB / u.path[1:]).read_bytes(), ctype)
+            if u.path in ("/apple-touch-icon.png", "/apple-touch-icon-precomposed.png", "/favicon.ico"):  # iOS and browsers ask for these at the root when the page's link is not used
+                return self.send(200, (WEB / "icons" / ("favicon.png" if u.path == "/favicon.ico" else "apple-touch-icon.png")).read_bytes(), "image/png")
             if u.path.startswith("/icons/") and re.match(r"^[A-Za-z0-9_\-]+\.png$", u.path[7:]):
                 return self.send(200, (WEB / "icons" / u.path[7:]).read_bytes(), "image/png")
             if u.path == "/ca.pem":  # public part of the local certificate authority, to trust on your phone
@@ -495,17 +329,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, path.read_bytes(), "image/png" if path.suffix == ".png" else "image/jpeg", extra)
             if u.path == "/api/samples":
                 return self.send(200, list_samples(o))
-            if u.path == "/api/notes":
-                return self.send(200, notes_json(resolve(q["id"], o)))
             if u.path == "/api/job":
                 j = jobs.get(q.get("id"))
                 return self.send(200, {k: v for k, v in j.items() if k != "owner"} if j and j.get("owner") == o["uid"] else {"status": "error", "message": "unknown job", "results": []})
-            if u.path == "/midi":
-                path, part = resolve(q["id"], o), q.get("part", "both")
-                fname = f"{path.stem}_{part}.mid" if part != "both" else f"{path.stem}.mid"
-                return self.send(200, midi_part(path, part), "audio/midi", {"Content-Disposition": f'attachment; filename="{fname}"'})
+            if u.path == "/audio":
+                path = resolve(q["id"], o)
+                extra = {"Content-Disposition": f'attachment; filename="{path.stem}.wav"'} if q.get("download") else {}
+                return self.send_audio(path, extra)
             if u.path == "/api/info":
-                return self.send(200, {"model": CKPT.name, "params_m": round(sum(p.numel() for p in model.parameters()) / 1e6, 1)})
+                return self.send(200, {"music_model": "surround (ACE-Step 1.5)", "music_ready": surround.ready()})
             return self.send(404, {"error": "not found"})
         except (KeyError, ValueError, FileNotFoundError) as e:
             return self.send(400, {"error": str(e)})
@@ -558,28 +390,59 @@ class Handler(BaseHTTPRequestHandler):
                 text = (b.get("prompt") or "").strip()
                 if not text:
                     return self.send(400, {"error": "Describe the music you want first."})
-                plan = chat.plan_music(b.get("model") or "gpt-oss:20b", text)
-                jid, ref = start_music(o, False, plan["style"], plan["length"], plan["creativity"], plan["count"])
-                return self.send(200, {"job": jid, "plan": plan, "reference": {"artist": ref[1], "title": ref[2]} if ref else None})
+                plan = chat.plan_music(b.get("model") or "gpt-oss:20b", text, bool(b.get("instrumental")))
+                return self.send(200, {"plan": plan})  # review first: nothing is generated until /api/music/make
             except Exception as e:
                 return self.send(400, {"error": str(e)})
-        if path != "/api/generate":
-            return self.send(404, {"error": "not found"})
-        try:
-            p = self.body_json()
-            defaults = {"count": 1, "tokens": 1000, "temp": 0.95, "top_p": 0.95, "rep": 1.12, "need_both": True, "prompt_tokens": 64}
-            p = {**defaults, **p}
-            p["count"] = max(1, min(int(p["count"]), 6))
-            p["tokens"] = max(200, min(int(p["tokens"]), 1000))
-            if p.get("continue_id"):
-                resolve(p["continue_id"], o)
-        except Exception as e:
-            return self.send(400, {"error": str(e)})
-        p["owner"] = o
-        jid = uuid.uuid4().hex[:8]
-        jobs[jid] = {"status": "running", "owner": o["uid"], "message": "Starting…", "results": [], "count": p["count"]}
-        threading.Thread(target=run_job, args=(jid, p), daemon=True).start()
-        return self.send(200, {"job": jid})
+        if path == "/api/music/field":
+            try:
+                b = self.body_json()
+                if b.get("field") not in ("caption", "lyrics", "idea"):
+                    return self.send(400, {"error": "unknown field"})
+                return self.send(200, {"text": chat.write_field(b.get("model") or "gpt-oss:20b", b["field"], b.get("prompt", ""), str(b.get("caption", "")), str(b.get("lyrics", "")), bool(b.get("instrumental")))})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
+        if path == "/api/music/random":
+            try:
+                return self.send(200, {"plan": chat.random_music(self.body_json().get("model") or "gpt-oss:20b")})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
+        if path == "/api/music/cancel":
+            j = jobs.get(parse_qs(urlparse(self.path).query).get("id", [""])[0])
+            if j and j.get("owner") == o["uid"] and j.get("status") == "running":
+                j["cancel"] = True
+                surround.cancel(next(k for k, x in jobs.items() if x is j))
+            return self.send(200, {"ok": True})
+        if path == "/api/music/make":
+            try:
+                b = self.body_json()
+                return self.send(200, {"job": start_music(o, bool(b.get("incognito")), b.get("caption"), b.get("lyrics", ""), b.get("length", "medium"))})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
+        return self.send(404, {"error": "not found"})
+
+    def send_audio(self, path, extra):
+        """Serves a WAV with Range support (needed for seeking, and by Safari/iPhone)."""
+        size = path.stat().st_size
+        start, end, code = 0, size - 1, 200
+        rng = self.headers.get("Range", "")
+        if rng.startswith("bytes=") and "-" in rng:
+            a, _, b = rng[6:].partition("-")
+            try:
+                start = int(a) if a else max(0, size - int(b))
+                end = min(int(b), size - 1) if a and b else size - 1
+                code = 206
+            except ValueError:
+                start, end, code = 0, size - 1, 200
+        if start > end or start >= size:
+            return self.send(416, b"", "audio/wav", {"Content-Range": f"bytes */{size}"})
+        with open(path, "rb") as f:
+            f.seek(start)
+            data = f.read(end - start + 1)
+        hdr = {"Accept-Ranges": "bytes", **extra}
+        if code == 206:
+            hdr["Content-Range"] = f"bytes {start}-{end}/{size}"
+        return self.send(code, data, "audio/wav", hdr)
 
     def auth_post(self, path):
         try:
@@ -710,7 +573,7 @@ def serve():
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()
     print(msg + "  (Ctrl+C to stop)", flush=True)
-    logbus.log("system", f"unplugged.ai started: music model {CKPT.name} on CPU, image model {'ready' if imgedit.status()['ready'] else 'not installed'}")
+    logbus.log("system", f"unplugged.ai started: music model surround {'ready' if surround.ready() else 'not installed'}, image model {'ready' if imgedit.status()['ready'] else 'not installed'}")
     servers[0].serve_forever()
 
 

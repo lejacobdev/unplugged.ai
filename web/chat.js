@@ -92,7 +92,7 @@
   }
   function md(src) {
     return src.split('```').map((p, i) => {
-      if (i % 2) { const nl = p.indexOf('\n'); const code = (nl < 0 ? '' : p.slice(nl + 1)).replace(/\n$/, ''); return `<pre><code>${esc(code)}</code><button class="cp">Copy</button></pre>`; }
+      if (i % 2) { const nl = p.indexOf('\n'); const lang = (nl < 0 ? '' : p.slice(0, nl)).trim().replace(/[^\w+#.-]/g, ''); const code = (nl < 0 ? '' : p.slice(nl + 1)).replace(/\n$/, ''); return `<div class="codeblk"><div class="codehead"><span>${esc(lang || 'text')}</span><button type="button" class="cp">${ico('copy')}<span>Copy</span></button></div><pre><code>${esc(code)}</code></pre></div>`; }
       return blocks(p);
     }).join('');
   }
@@ -101,6 +101,8 @@
   let chats = [], cur = { id: null, messages: [], title: 'New chat' }, streaming = false, ctrl = null, attached = null, files = [];
   const S = Store.get('chat-settings') || {};
   const settings = { model: S.model || 'gpt-oss:20b', think: S.think || 'low', tools: S.tools !== false, system: S.system || '' };
+  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true }, Store.get('prefs') || {});
+  const savePrefs = () => Store.set('prefs', PF);
   const saveSettings = () => Store.set('chat-settings', settings);
 
   // ---------- models + status
@@ -139,9 +141,6 @@
   el('model').onchange = () => { settings.model = el('model').value; saveSettings(); };
   el('think').value = settings.think; el('think').onchange = () => { settings.think = el('think').value; saveSettings(); };
   el('tools').checked = settings.tools; el('tools').onchange = () => { settings.tools = el('tools').checked; saveSettings(); };
-  el('sysbtn').onclick = () => { el('systext').value = settings.system; el('sysdlg').showModal(); };
-  el('syssave').onclick = () => { settings.system = el('systext').value.trim(); saveSettings(); };
-  el('sysreset').onclick = () => { el('systext').value = ''; };
 
   // ---------- history list
   let listSig = '';
@@ -172,15 +171,15 @@
     const finish = async save => {
       if (done) return; done = true;
       const t = inp.value.trim();
-      if (save && t && t !== old) { try { await post('/api/chat/rename', { id: cur.id, title: t }); cur.title = t; loadList(); } catch (e) { alert(e.message); } }
+      if (save && t && t !== old) { try { await post('/api/chat/rename', { id: cur.id, title: t }); cur.title = t; loadList(); } catch (e) { UI.alert(e.message); } }
       setTitle();
     };
     inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } else if (e.key === 'Escape') finish(false); };
     inp.onblur = () => finish(true);
   }
   el('ttl').title = 'Click to rename this chat'; el('ttl').onclick = editTitle;
-  async function renameChat(c) { const t = prompt('Rename chat', c.title); if (t && t.trim()) { await post('/api/chat/rename', { id: c.id, title: t }); if (cur.id === c.id) cur.title = t; loadList(); setTitle(); } }
-  async function deleteChat(c) { if (!confirm(`Delete "${c.title}"?`)) return; await J('/api/chat/item?id=' + c.id, { method: 'DELETE' }); if (cur.id === c.id) newChat(); loadList(); }
+  async function renameChat(c) { const t = await UI.prompt('Rename chat', { value: c.title, ok: 'Rename' }); if (t && t.trim()) { await post('/api/chat/rename', { id: c.id, title: t }); if (cur.id === c.id) cur.title = t; loadList(); setTitle(); } }
+  async function deleteChat(c) { if (!await UI.confirm(`"${c.title}" will be deleted.`, { title: 'Delete chat?', ok: 'Delete', danger: true })) return; await J('/api/chat/item?id=' + c.id, { method: 'DELETE' }); if (cur.id === c.id) newChat(); loadList(); }
   async function openChat(id) {
     if (streaming) return;
     leaveIncognito();
@@ -201,7 +200,9 @@
     const b = d.querySelector('.b');
     if (running) { b.textContent = args && Object.keys(args).length ? JSON.stringify(args) : ''; return d; }
     if (card && card.kind === 'music') {
-      musicPlayer(b, card.id, card.info);
+      musicPlayer(b, card.id);
+    } else if (card && card.kind === 'music_draft') {
+      musicDraft(b, card);
     } else if (card && card.kind === 'music_job') {
       b.textContent = 'Starting…'; pollMusic(card.job, b);
     } else if (card && card.kind === 'image_job') {
@@ -211,9 +212,10 @@
   }
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-  // ---------- music inside the chat: live progress, then a player with piano roll and downloads
+  // ---------- music inside the chat: live progress, then an audio player with a download
   async function pollMusic(job, b) {
-    b.innerHTML = '<div class="ijtxt">Starting the music model…</div><div class="pbar" style="display:block"><i class="ijfill"></i></div>';
+    b.innerHTML = '<div class="ijtxt">Starting the music model…</div><div class="pbar" style="display:block"><i class="ijfill"></i></div><div class="ijacts"><button class="ijcancel">Stop generating</button></div>';
+    b.querySelector('.ijcancel').onclick = e => { e.target.disabled = true; e.target.textContent = 'Stopping...'; fetch('/api/music/cancel?id=' + job, { method: 'POST' }); };
     const txt = b.querySelector('.ijtxt'), fill = b.querySelector('.ijfill'); let fake = 4;
     for (;;) {
       let j; try { j = await J('/api/job?id=' + job); } catch (e) { txt.textContent = 'Lost track of this job.'; return; }
@@ -225,61 +227,35 @@
         await new Promise(r => setTimeout(r, 1200)); continue;
       }
       if (j.status === 'done' && j.results && j.results.length) {
-        try { const sid = j.results[0]; const n = await J('/api/notes?id=' + encodeURIComponent(sid)); b.innerHTML = ''; musicPlayer(b, sid, { duration: n.duration, piano: (n.tracks.find(t => t.name === 'piano') || { notes: [] }).notes.length, guitar: (n.tracks.find(t => t.name === 'guitar') || { notes: [] }).notes.length }); }
-        catch (e) { txt.textContent = 'Done. Open the Music tab to play it.'; }
+        b.innerHTML = ''; musicPlayer(b, j.results[0]);
         return;
       }
-      txt.textContent = j.message || 'No usable piece came out. Ask again.'; b.querySelector('.pbar')?.remove(); return;
+      txt.textContent = j.status === 'cancelled' ? 'Stopped. No song was made.' : (j.message || 'No song came out. Ask again.'); b.querySelector('.pbar')?.remove(); b.querySelector('.ijacts')?.remove(); return;
     }
   }
-  const midiPlayers = new Set();
-  let audioCtx = null;
-  function musicPlayer(b, id, info) {
-    const q = '/midi?id=' + encodeURIComponent(id);
-    b.innerHTML = `<div class="mp"><canvas class="mproll"></canvas>
-      <div class="mprow"><button class="mpplay">${ico('play')} Play</button><span class="mptime">0:00 / ${mmss(info.duration || 0)}</span>
-      <span class="mpmeta">${info.piano} piano · ${info.guitar} guitar notes</span></div>
-      <div class="mpdl"><a href="${q}&part=both" download>${ico('download')} Both (.mid)</a><a href="${q}&part=piano" download>${ico('download')} Piano</a><a href="${q}&part=guitar" download>${ico('download')} Guitar</a><button class="mpopen">Open in Music tab</button></div></div>`;
-    const cv = b.querySelector('.mproll'), btn = b.querySelector('.mpplay'), tm = b.querySelector('.mptime');
-    let data = null, playing = false, t0 = 0, offset = 0, nodes = [], raf = 0;
-    const colors = { piano: '#6ea0ff', guitar: '#f0a06e' };
-    const pos = () => playing ? Math.min(data.duration, offset + audioCtx.currentTime - t0) : offset;
-    function draw() {
-      if (!data) return; const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
-      cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
-      const all = data.tracks.flatMap(t => t.notes); if (!all.length) return;
-      const lo = Math.min(...all.map(n => n[2])) - 2, hi = Math.max(...all.map(n => n[2])) + 2, dur = data.duration;
-      for (const t of data.tracks) { g.globalAlpha = .9; g.fillStyle = colors[t.name] || '#888'; for (const [s, d, p] of t.notes) g.fillRect(s / dur * w, h - (p - lo + 1) / (hi - lo + 1) * h, Math.max(2, d / dur * w), Math.max(2, h / (hi - lo + 1) - 1)); }
-      g.globalAlpha = 1; const x = pos() / dur * w; g.fillStyle = '#fff'; g.fillRect(x, 0, 2, h);
-      tm.textContent = `${mmss(pos())} / ${mmss(dur)}`;
-    }
-    function stop(keep) { if (!keep && playing) offset = pos(); playing = false; cancelAnimationFrame(raf); nodes.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); nodes = []; btn.innerHTML = ico('play') + ' Play'; draw(); }
-    function tick() { if (!playing) return; draw(); if (pos() >= data.duration) { stop(true); offset = 0; draw(); return; } raf = requestAnimationFrame(tick); }
-    function play() {
-      midiPlayers.forEach(p => p !== api && p.stop());
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); stop(true);
-      playing = true; t0 = audioCtx.currentTime + 0.05;
-      const master = audioCtx.createGain(); master.gain.value = 0.35; const comp = audioCtx.createDynamicsCompressor(); master.connect(comp); comp.connect(audioCtx.destination); nodes = [master];
-      for (const t of data.tracks) {
-        const bus = audioCtx.createGain(); bus.gain.value = t.name === 'guitar' ? 0.5 : 0.8;
-        if (t.name === 'guitar') { const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; bus.connect(lp); lp.connect(master); } else bus.connect(master);
-        for (const [s, d, p, v] of t.notes) {
-          if (s + d < offset) continue;
-          const when = t0 + Math.max(0, s - offset), len = Math.max(0.08, d - Math.max(0, offset - s)), vel = (v / 127) * 0.6 + 0.1;
-          const o = audioCtx.createOscillator(), e = audioCtx.createGain(); o.frequency.value = 440 * Math.pow(2, (p - 69) / 12);
-          o.type = t.name === 'piano' ? 'triangle' : 'sawtooth';
-          e.gain.setValueAtTime(0.0001, when); e.gain.exponentialRampToValueAtTime(vel, when + 0.01); e.gain.exponentialRampToValueAtTime(0.0001, when + len + 0.25);
-          o.connect(e); e.connect(bus); o.start(when); o.stop(when + len + 0.3); nodes.push(o);
-        }
-        nodes.push(bus);
-      }
-      btn.innerHTML = ico('pause') + ' Pause'; tick();
-    }
-    const api = { stop: () => { if (playing) stop(); } }; midiPlayers.add(api);
-    btn.onclick = async () => { if (!data) data = await J('/api/notes?id=' + encodeURIComponent(id)); playing ? stop() : play(); };
-    cv.onclick = async e => { if (!data) data = await J('/api/notes?id=' + encodeURIComponent(id)); const r = cv.getBoundingClientRect(); offset = (e.clientX - r.left) / r.width * data.duration; if (playing) play(); else draw(); };
+  // the chat model's caption and lyrics, editable: nothing is generated until the user presses the button
+  function musicDraft(b, card) {
+    b.innerHTML = `<div class="mdraft"><label>Caption (the sound)</label><textarea class="mdcap" rows="3"></textarea>
+      <label>Lyrics (empty for instrumental)</label><textarea class="mdlyr" rows="8"></textarea>
+      <div class="mdacts"><select class="mdlen"><option value="short">Short, about 1 minute</option><option value="medium">Medium, about 2 minutes</option><option value="long">Long, about 3 minutes</option></select>
+      <button class="primary mdgo" style="width:auto;margin:0">Generate song</button></div><div class="hint mdmsg">Review or edit, then press Generate song. Nothing is made until you do.</div></div>`;
+    b.querySelector('.mdcap').value = card.caption || ''; b.querySelector('.mdlyr').value = card.lyrics || ''; b.querySelector('.mdlen').value = card.length || 'medium';
+    b.querySelector('.mdgo').onclick = async () => {
+      const caption = b.querySelector('.mdcap').value.trim();
+      if (!caption) { b.querySelector('.mdmsg').textContent = 'The caption cannot be empty.'; return; }
+      b.querySelector('.mdgo').disabled = true;
+      try {
+        const r = await fetch('/api/music/make', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption, lyrics: b.querySelector('.mdlyr').value, length: b.querySelector('.mdlen').value, incognito: !!cur.incognito }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || 'failed');
+        pollMusic(j.job, b);
+      } catch (e) { b.querySelector('.mdmsg').textContent = 'Error: ' + e.message; b.querySelector('.mdgo').disabled = false; }
+    };
+  }
+  function musicPlayer(b, id) {
+    const q = '/audio?id=' + encodeURIComponent(id);
+    b.innerHTML = `<div class="mp"><audio controls preload="metadata" src="${q}"></audio>
+      <div class="mpdl"><a href="${q}&download=1" download>${ico('download')} Download (.wav)</a><button class="mpopen">Open in Music tab</button></div></div>`;
     b.querySelector('.mpopen').onclick = async () => { showTab('music'); await loadLibrary(id); };
-    J('/api/notes?id=' + encodeURIComponent(id)).then(d => { data = d; draw(); }).catch(() => {});
   }
   async function pollImage(job, b) {
     b.innerHTML = `<div class="ijtxt">Starting the image model…</div><div class="pbar" style="display:block"><i class="ijfill"></i></div>
@@ -343,7 +319,12 @@
     shown = { id: cur.id, n: cur.messages.length };
     scrollDown();
   }
-  document.addEventListener('click', e => { if (e.target.classList.contains('cp')) { navigator.clipboard.writeText(e.target.parentElement.querySelector('code').textContent); e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy', 1200); } });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.cp'); if (!b) return;
+    navigator.clipboard.writeText(b.closest('.codeblk').querySelector('code').textContent);
+    b.innerHTML = ico('check') + '<span>Copied</span>'; b.classList.add('done');
+    setTimeout(() => { b.innerHTML = ico('copy') + '<span>Copy</span>'; b.classList.remove('done'); }, 1500);
+  });
 
   // ---------- attach
   const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
@@ -352,11 +333,15 @@
     if (attached) { const d = document.createElement('div'); d.className = 'achip img'; d.innerHTML = `<img src="${attached}"><button type="button" aria-label="Remove picture">${ico('x')}</button>`; d.querySelector('button').onclick = () => { attached = null; renderAttach(); }; box.appendChild(d); }
     files.forEach((f, i) => { const d = document.createElement('div'); d.className = 'achip'; d.innerHTML = `${ico('file')}<span class="an">${esc(f.name)}</span><span class="as">${fmtSize(f.size)}</span><button type="button" aria-label="Remove file">${ico('x')}</button>`; d.querySelector('button').onclick = () => { files.splice(i, 1); renderAttach(); }; box.appendChild(d); });
   }
-  el('attbtn').onclick = () => el('attfile').click();
+  el('attbtn').onclick = e => { e.stopPropagation(); const m = el('attmenu'); m.hidden = !m.hidden; if (!m.hidden) el('am-toolsbox').checked = settings.tools; };
+  el('am-files').onclick = () => { el('attmenu').hidden = true; el('attfile').click(); };
+  el('am-toolsbox').onchange = () => { settings.tools = el('am-toolsbox').checked; el('tools').checked = settings.tools; saveSettings(); };
+  document.addEventListener('click', e => { if (e.target.isConnected && !el('attmenu').contains(e.target)) el('attmenu').hidden = true; });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') el('attmenu').hidden = true; });
   // pictures go to the picture editor flow; every other file is read by the language model
   function attachFile(f) {
     if (!f) return;
-    if (f.size > 25 * 1024 * 1024) { alert(f.name + ' is larger than 25 MB.'); return; }
+    if (f.size > 25 * 1024 * 1024) { UI.alert(f.name + ' is larger than 25 MB.', { title: 'File too large' }); return; }
     const r = new FileReader();
     r.onload = () => {
       if (f.type.startsWith('image/') && !attached) attached = r.result;
@@ -375,7 +360,7 @@
   // ---------- sending
   const input = el('input');
   input.oninput = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 200) + 'px'; };
-  input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } };
+  input.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing && (PF.enter ? !e.shiftKey : (e.metaKey || e.ctrlKey))) { e.preventDefault(); send(); } };
   el('send').onclick = () => { if (streaming) stop(); else send(); };
   async function stop() { if (cur.id) await fetch('/api/chat/stop?id=' + cur.id, { method: 'POST' }); }
 
@@ -385,7 +370,7 @@
     if (!regenerate && !text && !attached && !files.length) return;
     if (macDown) { setBanner(bannerText, true); return; }
     if (!cur.id) { const c = await post('/api/chat/new', { model: settings.model, incognito: !!cur.incognito }); cur.id = c.id; }
-    const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, system: settings.system, regenerate };
+    const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, personal: { name: PF.name, about: PF.about, style: PF.style, instr: PF.instr }, regenerate };
     if (!regenerate) {
       body.content = text; if (attached) body.image = attached;
       if (files.length) body.files = files.map(f => ({ name: f.name, data: f.data }));
@@ -459,7 +444,6 @@
   el('model').addEventListener('change', syncModelBtn);
   el('modelbtn').onclick = e => { e.stopPropagation(); el('modelmenu').hidden = !el('modelmenu').hidden; syncModelBtn(); };
   document.addEventListener('click', e => { if (e.target.isConnected && !el('modelmenu').contains(e.target) && e.target !== el('modelbtn') && !e.target.closest('.dd-menu')) el('modelmenu').hidden = true; });
-  el('sysbtn').addEventListener('click', () => { el('modelmenu').hidden = true; });
   setInterval(syncModelBtn, 2000);
 
   // ---------- account chip + menu
@@ -471,13 +455,13 @@
   el('acct').onclick = e => { e.stopPropagation(); el('acctmenu').hidden = !el('acctmenu').hidden; };
   document.addEventListener('click', e => { if (e.target.isConnected && !el('acctmenu').contains(e.target)) el('acctmenu').hidden = true; });
   el('am-out').onclick = async () => {
-    if (ME.kind === 'guest' && !confirm('End this guest session? Your chats, pictures and music will be deleted.')) return;
+    if (ME.kind === 'guest' && !await UI.confirm('Your chats, pictures and music will be deleted.', { title: 'End guest session?', ok: 'End session', danger: true })) return;
     await fetch('/api/auth/logout', { method: 'POST' }); await clearOfflineData(); location.reload();
   };
   el('am-pw').onclick = async () => {
-    const old = prompt('Current password'); if (old == null) return;
-    const nw = prompt('New password (at least 6 characters)'); if (nw == null) return;
-    try { await post('/api/auth/password', { old, new: nw }); alert('Password changed.'); } catch (e) { alert(e.message); }
+    const old = await UI.prompt('Change password', { label: 'Current password', type: 'password', ok: 'Next' }); if (old == null) return;
+    const nw = await UI.prompt('Change password', { label: 'New password (at least 6 characters)', type: 'password', ok: 'Change' }); if (nw == null) return;
+    try { await post('/api/auth/password', { old, new: nw }); UI.alert('Password changed.'); } catch (e) { UI.alert(e.message, { title: 'Could not change password' }); }
   };
   setInterval(() => fetch('/api/me').catch(() => {}), 60000); // keeps a guest session alive while the browser is open
 
@@ -486,4 +470,46 @@
   const view = loadView();
   showTab(['chat', 'music', 'cover', 'console'].includes(view.tab) ? view.tab : 'chat');
   if (view.chat) openChat(view.chat).then(() => { if (view.tab && view.tab !== 'chat') showTab(view.tab); }).catch(() => {});
+
+// ---------- settings dialog
+(() => {
+  const el = id => document.getElementById(id), dlg = el('setdlg');
+  const segs = { 's-theme': [['auto', 'System'], ['light', 'Light'], ['dark', 'Dark']], 's-size': [['s', 'Small'], ['m', 'Medium'], ['l', 'Large']],
+    'p-style': [['default', 'Default'], ['concise', 'Concise'], ['detailed', 'Detailed'], ['friendly', 'Friendly']] };
+  const store = () => { try { return JSON.parse(localStorage.getItem('chat-settings-ui') || '{}'); } catch (e) { return {}; } };
+  const setSeg = (id, v) => { const s = el(id); s.dataset.v = v; const keys = segs[id].map(x => x[0]); s.style.setProperty('--i', Math.max(0, keys.indexOf(v))); s.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); };
+  for (const [id, opts] of Object.entries(segs)) {
+    const s = el(id); s.style.setProperty('--n', opts.length);
+    s.innerHTML = '<span class="pill"></span>' + opts.map(([v, l]) => `<button type="button" data-v="${v}">${l}</button>`).join('');
+    s.onclick = e => { const b = e.target.closest('button'); if (!b) return; setSeg(id, b.dataset.v); apply(id, b.dataset.v); };
+  }
+  const SIZES = { s: '14px', m: '16px', l: '17px' };
+  function applySize() { document.documentElement.style.setProperty('--msg-size', SIZES[PF.size] || SIZES.m); }
+  function apply(id, v) {
+    if (id === 's-theme') window.applyTheme(v);
+    if (id === 's-size') { PF.size = v; applySize(); savePrefs(); }
+    if (id === 'p-style') { PF.style = v; savePrefs(); }
+  }
+  function fill() {
+    let t = 'auto'; try { t = localStorage.getItem('theme') || 'auto'; } catch (e) {}
+    setSeg('s-theme', t); setSeg('s-size', PF.size); setSeg('p-style', PF.style);
+    el('s-enter').checked = PF.enter; el('s-tools').checked = settings.tools; el('s-think').value = settings.think;
+    el('s-model').innerHTML = el('model').innerHTML; el('s-model').value = settings.model;
+    el('p-name').value = PF.name; el('p-about').value = PF.about; el('p-instr').value = PF.instr;
+    document.dispatchEvent(new Event('ui-sync'));
+  }
+  function open(sec) { fill(); show(sec || 'general'); if (!dlg.open) dlg.showModal(); }
+  function show(sec) { dlg.querySelectorAll('.setnav button').forEach(b => b.classList.toggle('on', b.dataset.s === sec)); dlg.querySelectorAll('.setpane section').forEach(s => { s.hidden = s.dataset.s !== sec; }); }
+  el('setnav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.s); };
+  el('setx').innerHTML = window.ico ? ico('x') : '&times;'; el('setx').onclick = () => dlg.close();
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  el('gear').onclick = () => open('general');
+  el('s-enter').onchange = () => { PF.enter = el('s-enter').checked; savePrefs(); };
+  el('s-tools').onchange = () => { settings.tools = el('s-tools').checked; el('tools').checked = settings.tools; saveSettings(); };
+  el('s-think').onchange = () => { settings.think = el('s-think').value; el('think').value = settings.think; saveSettings(); el('think').dispatchEvent(new Event('change')); };
+  el('s-model').onchange = () => { settings.model = el('s-model').value; el('model').value = settings.model; saveSettings(); el('model').dispatchEvent(new Event('change')); };
+  for (const [id, k] of [['p-name', 'name'], ['p-about', 'about'], ['p-instr', 'instr']]) el(id).oninput = () => { PF[k] = el(id).value; savePrefs(); };
+  el('p-reset').onclick = () => { Object.assign(PF, { name: '', about: '', style: 'default', instr: '' }); savePrefs(); fill(); };
+  applySize();
+})();
 })();

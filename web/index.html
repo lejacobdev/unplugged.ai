@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#141416">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="unplugged.ai">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="icon" href="/icons/favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png"><link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="icon" href="/icons/favicon.png">
 <title>unplugged.ai</title>
 <style>
   :root {
@@ -117,6 +117,7 @@
   <div class="sidefoot">
     <button class="acct" id="acct" title="Account"><span class="av" id="av"></span><span class="who"><b id="whoname"></b><small id="stat"></small></span></button>
     <button id="theme" title="Toggle light/dark"><i data-i="theme"></i></button>
+    <button id="gear" title="Settings"><i data-i="settings"></i></button>
     <div class="acctmenu" id="acctmenu" hidden>
     <div class="am-h" id="amh"></div>
     <div class="am-lan" id="amlan" hidden></div>
@@ -129,7 +130,7 @@
 <section id="tab-chat">
   <div class="chead">
     <div class="modelwrap">
-      <button class="modelbtn" id="modelbtn" aria-haspopup="true"><span id="modelname">stereo 2</span><i data-i="chevron"></i></button>
+      <button class="modelbtn" id="modelbtn" aria-haspopup="true"><span id="modelname">stereo</span><i data-i="chevron"></i></button>
       <div class="modelmenu" id="modelmenu" hidden>
         <div class="mm-label">Model</div>
         <select id="model" title="Language model"></select>
@@ -139,7 +140,6 @@
           <option value="off">Off</option><option value="low">Low</option>
           <option value="medium">Medium</option><option value="high">High</option></select>
         <label class="mm-row" title="Let the model make music and edit pictures for you"><span>Tools (music and pictures)</span><input type="checkbox" id="tools" class="switch"></label>
-        <button class="mm-row" id="sysbtn" type="button"><span>System prompt</span><i data-i="settings"></i></button>
       </div>
     </div>
     <span class="ttl" id="ttl">New chat</span>
@@ -148,7 +148,11 @@
   <div class="msgs" id="msgs"><div class="inner" id="inner"></div></div>
   <div class="composer"><div class="box">
     <div class="attach" id="attach"></div>
-    <div class="row"><button id="attbtn" class="roundbtn" title="Attach files or pictures"><i data-i="plus"></i></button><input type="file" id="attfile" multiple hidden>
+    <div class="row"><div class="attwrap"><button id="attbtn" class="roundbtn" title="Add files and more" aria-haspopup="true"><i data-i="plus"></i></button>
+        <div class="attmenu" id="attmenu" hidden>
+          <button class="am-item" id="am-files" type="button"><i data-i="file"></i><span>Add photos and files</span></button>
+          <label class="am-item" id="am-tools" title="Let the model make music and edit pictures for you"><i data-i="settings"></i><span>Tools (music and pictures)</span><input type="checkbox" id="am-toolsbox" class="switch"></label>
+        </div></div><input type="file" id="attfile" multiple hidden>
       <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
       <button class="send" id="send" title="Send"><i data-i="arrowup"></i></button></div>
   </div><div class="disclaimer">Runs fully offline on your Mac. Answers can be wrong.</div></div>
@@ -157,53 +161,46 @@
 <main id="tab-music" style="display:none">
   <section class="card">
     <h2>Make music</h2>
-    <label for="mprompt">Describe what you want</label>
-    <textarea id="mprompt" rows="3" placeholder="A slow, dreamy piece with clean electric guitar, in the style of Pink Floyd"></textarea>
-    <label>Model <select id="mmodel"></select></label>
-    <button class="primary" id="mcreate">Create</button>
-    <details class="adv"><summary>Advanced settings</summary>
-    <label>How many <span class="v" id="v_count">2</span>
-      <input type="range" id="count" min="1" max="6" value="2"></label>
-    <label>Length <span class="v" id="v_tokens">~45 s</span>
-      <input type="range" id="tokens" min="300" max="1000" step="100" value="800"></label>
-    <label>Creativity <span class="v" id="v_temp">0.95</span>
-      <input type="range" id="temp" min="0.85" max="1.3" step="0.05" value="0.95"></label>
-    <label>Variety (avoid repetition) <span class="v" id="v_rep">1.12</span>
-      <input type="range" id="rep" min="1.05" max="1.3" step="0.01" value="1.12"></label>
-    <label>Start from <select id="cont"><option value="">Nothing (brand new)</option></select></label>
-    <label id="plabel" style="display:none">Keep the first <span class="v" id="v_pt">64</span> tokens
-      <input type="range" id="pt" min="16" max="300" step="8" value="64"></label>
-    <label>Seed (optional, repeatable) <input type="number" id="seed" placeholder="random"></label>
-    <div class="check"><input type="checkbox" id="both" checked><label for="both" style="margin:0">Require both piano and guitar</label></div>
-    <button id="go" style="width:100%;margin-top:4px">Generate with these settings</button>
-    <button id="reset" style="width:100%;margin-top:8px;font-size:13px">Reset to recommended settings</button>
-    </details>
+    <label for="mprompt">Describe the song <span class="hint" style="font-weight:400">(optional: your chat model writes the caption and lyrics for you to review)</span></label>
+    <div class="mfield"><textarea id="mprompt" rows="2" placeholder="A mellow acoustic indie song about driving home at night, female vocals"></textarea>
+      <button class="wand" data-field="idea" type="button" title="Write a description with your chat model"><i data-i="wand"></i><span class="dots"><i></i><i></i><i></i></span></button></div>
+    <label>Written by <select id="mmodel"></select></label>
+    <div class="check"><input type="checkbox" id="minst"><label for="minst" style="margin:0">Instrumental (no vocals)</label></div>
+    <button id="mcreate"><i data-i="compose"></i> Write caption and lyrics</button>
+
+    <label for="mcap">Caption <span class="hint" style="font-weight:400">the sound</span></label>
+    <div class="mfield"><textarea id="mcap" rows="4" placeholder="indie folk, fingerpicked guitar, warm female vocals, 90 bpm"></textarea>
+      <button class="wand" data-field="caption" type="button" title="Write the caption with your chat model"><i data-i="wand"></i><span class="dots"><i></i><i></i><i></i></span></button></div>
+    <label for="mlyr">Lyrics <span class="hint" style="font-weight:400">use [verse], [chorus], [bridge] on their own lines; empty for instrumental</span></label>
+    <div class="mfield"><textarea id="mlyr" rows="10" placeholder="[verse]&#10;..."></textarea>
+      <button class="wand" data-field="lyrics" type="button" title="Write the lyrics with your chat model"><i data-i="wand"></i><span class="dots"><i></i><i></i><i></i></span></button></div>
+    <div class="wandpop" id="wandpop" hidden>
+      <input id="wandq" maxlength="500" placeholder="">
+      <button class="primary" id="wandgo" style="width:auto;margin:0">Write</button>
+    </div>
+    <label>Length <select id="mlen"><option value="short">Short, about 1 minute</option><option value="medium" selected>Medium, about 2 minutes</option><option value="long">Long, about 3 minutes</option></select></label>
+    <button class="primary" id="go">Generate song</button>
     <div class="bar" id="bar"><i></i></div>
     <div class="status" id="status"></div>
-    <p class="hint">Each piece takes roughly 20–60 seconds on this Mac. Name an artist or song and it starts from the opening of a real piece by them in the local library, then writes new music. Everything stays on your computer.</p>
+    <button id="mstop" style="display:none;width:100%;margin-top:8px">Stop generating</button>
+    <p class="hint">Write the caption and lyrics yourself, let your chat model write both from the description above, or use the wand inside either field to have it write just that one (leave its prompt empty for a random idea). Nothing is generated until you press <b>Generate song</b>, so you can edit first. <b>surround</b>, the music model, then makes the audio; a song takes a few minutes on this Mac, and the first one after a pause also loads the model. Everything stays on your computer.</p>
   </section>
 
   <div class="right">
     <section class="card">
       <h2>Player</h2>
-      <div class="transport">
-        <button id="play" disabled><i data-i="play"></i> Play</button>
-        <button id="stop" disabled><i data-i="stop"></i> Stop</button>
-        <span class="title" id="ptitle">Select a sample below</span>
-        <div class="legend">
-          <label><input type="checkbox" id="m_piano" checked><span class="dot" style="background:var(--piano)"></span>Piano</label>
-          <label><input type="checkbox" id="m_guitar" checked><span class="dot" style="background:var(--guitar)"></span>Guitar</label>
-        </div>
+      <div class="empty" id="empty">Make a song or pick one from the library.</div>
+      <div id="pwrap" style="display:none">
+        <div class="title" id="ptitle"></div>
+        <audio id="audio" controls preload="metadata" style="width:100%;margin:10px 0"></audio>
+        <div class="dl" id="dl"></div>
+        <details class="adv" id="plyr"><summary>Caption and lyrics</summary><pre id="plyrtxt" class="lyr"></pre></details>
       </div>
-      <div class="empty" id="empty">Generate a sample or pick one from the library.<br>The notes will show here as a piano roll.</div>
-      <canvas id="roll" style="display:none"></canvas>
-      <div class="dl" id="dl"></div>
-      <p class="hint">Playback uses simple built-in sounds just to preview. For the real thing, download the MIDI and load it into GarageBand or Logic with a piano and a guitar sound.</p>
     </section>
 
     <section class="card">
       <h2>Library</h2>
-      <table><thead><tr><th>Name</th><th>Length</th><th>Piano</th><th>Guitar</th><th></th><th></th></tr></thead>
+      <table><thead><tr><th>Song</th><th>Length</th><th></th></tr></thead>
       <tbody id="lib"></tbody></table>
     </section>
   </div>
@@ -293,22 +290,38 @@
 </main>
 
 </div></div>
-<dialog id="sysdlg"><form method="dialog">
-  <h2 style="margin:0">System prompt</h2>
-  <p class="hint">Instructions the model follows in every chat. Leave empty to use the default.</p>
-  <textarea id="systext" rows="8"></textarea>
-  <div style="display:flex;gap:8px;justify-content:flex-end">
-    <button id="sysreset" type="button">Reset to default</button>
-    <button id="syssave" value="ok" class="primary" style="width:auto;margin:0">Save</button></div>
-</form></dialog>
+<dialog id="setdlg" class="setdlg"><div class="sethead"><h2>Settings</h2><button id="setx" type="button" aria-label="Close"></button></div>
+<div class="setbody">
+  <nav class="setnav" id="setnav">
+    <button data-s="general" class="on">General</button>
+    <button data-s="personal">Personalization</button>
+  </nav>
+  <div class="setpane">
+    <section data-s="general">
+      <div class="setrow"><div><b>Appearance</b><small>Light, dark, or follow this device.</small></div><div class="seg seg3" id="s-theme" data-v="auto"></div></div>
+      <div class="setrow"><div><b>Text size</b><small>Size of messages and the composer.</small></div><div class="seg seg3" id="s-size" data-v="m"></div></div>
+      <div class="setrow"><div><b>Enter sends the message</b><small>Off: Enter adds a new line and Cmd/Ctrl+Enter sends.</small></div><input type="checkbox" id="s-enter" class="switch"></div>
+      <div class="setrow"><div><b>Default model</b><small>Used for new chats on this device.</small></div><select id="s-model"></select></div>
+      <div class="setrow"><div><b>Default reasoning</b><small>How long the model thinks before answering.</small></div><select id="s-think"><option value="off">Off</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+      <div class="setrow"><div><b>Tools</b><small>Let the model make music and edit pictures for you.</small></div><input type="checkbox" id="s-tools" class="switch"></div>
+    </section>
+    <section data-s="personal" hidden>
+      <p class="hint">What you write here is added to the instructions the model gets in every chat on this device. Nothing leaves your Mac.</p>
+      <label class="setlbl">What should it call you?<input id="p-name" maxlength="60" placeholder="Your name"></label>
+      <label class="setlbl">What do you do?<input id="p-about" maxlength="200" placeholder="For example: student, designer, software engineer"></label>
+      <div class="setlbl">Answer style<div class="seg seg4" id="p-style" data-v="default"></div></div>
+      <label class="setlbl">Custom instructions<textarea id="p-instr" rows="6" maxlength="2000" placeholder="Anything else the model should always know or do"></textarea></label>
+      <div class="setfoot"><button id="p-reset" type="button">Clear personalization</button></div>
+    </section>
+  </div>
+</div></dialog>
 <script>
 const $ = id => document.getElementById(id);
-const COLORS = () => ({ piano: getComputedStyle(document.documentElement).getPropertyValue('--piano').trim(),
-                        guitar: getComputedStyle(document.documentElement).getPropertyValue('--guitar').trim() });
-let current = null, data = null, samples = [], playing = false, ctx = null, t0 = 0, raf = 0, nodes = [], offset = 0;
+let current = null, samples = [];
 
 // ---- theme
 try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+window.applyTheme = t => { if (t === 'auto') { delete document.documentElement.dataset.theme; try { localStorage.removeItem('theme'); } catch (e) {} } else { document.documentElement.dataset.theme = t; try { localStorage.setItem('theme', t); } catch (e) {} } try { draw(); } catch (e) {} };
 $('theme').onclick = () => {
   const dark = matchMedia('(prefers-color-scheme: dark)').matches;
   const cur = document.documentElement.dataset.theme || (dark ? 'dark' : 'light');
@@ -320,7 +333,7 @@ $('theme').onclick = () => {
 
 // ---- remember every setting + running jobs across page refreshes
 const LS = Store;
-const FORM_IDS = ['count', 'tokens', 'temp', 'rep', 'pt', 'seed', 'both', 'm_piano', 'm_guitar',
+const FORM_IDS = ['mlen', 'minst', 'mcap', 'mlyr', 'mprompt',
                   'livepv', 'preserve', 'iquality', 'isize', 'guid', 'ivar', 'iseed', 'iprompt'];
 (() => {
   const saved = LS.get('jacobai-form') || {};
@@ -338,12 +351,6 @@ const setJob = (k, v) => { const j = LS.get('jacobai-jobs') || {}; if (v) j[k] =
 
 // ---- controls
 const bind = (id, out, fmt) => { const f = () => $(out).textContent = fmt($(id).value); $(id).oninput = f; f(); };
-bind('count', 'v_count', v => v);
-bind('tokens', 'v_tokens', v => '~' + Math.round(v * 0.045) + ' s');
-bind('temp', 'v_temp', v => (+v).toFixed(2));
-bind('rep', 'v_rep', v => (+v).toFixed(2));
-bind('pt', 'v_pt', v => v);
-$('cont').onchange = () => $('plabel').style.display = $('cont').value ? 'block' : 'none';
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -352,195 +359,74 @@ async function api(path, opts) {
   return j;
 }
 
-$('reset').onclick = () => {
-  [['count',2],['tokens',800],['temp',0.95],['rep',1.12],['pt',64]].forEach(([id,v]) => { $(id).value = v; $(id).dispatchEvent(new Event('input')); });
-  $('both').checked = true; $('seed').value = ''; $('cont').value = ''; $('plabel').style.display = 'none';
-};
-
 // ---- library
 let libSig = '';
+const songLabel = s => (s.caption || s.name).replace(/\s+/g, ' ').slice(0, 60);
 async function loadLibrary(selectId) {
   const fresh = await api('/api/samples'), sig = JSON.stringify(fresh) + '|' + current;
   if (sig === libSig && !selectId) return;
   libSig = sig; samples = fresh;
   const body = $('lib');
   body.innerHTML = '';
-  if (!samples.length) body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Nothing yet. Press Generate.</td></tr>';
+  if (!samples.length) body.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">Nothing yet. Create a song.</td></tr>';
   for (const s of samples) {
     const tr = document.createElement('tr');
     tr.className = 'row' + (current === s.id ? ' sel' : '');
-    const label = s.kind === 'featured' ? `Featured ${s.name.replace('sample_', '#')}` : s.name.replace(/^gen_/, 'Mine ');
-    tr.innerHTML = `<td>${label} ${s.continued_from ? '<span class="tag">continued</span>' : ''}</td>
-      <td>${s.duration}s</td><td>${s.piano}</td><td>${s.guitar}</td>
-      <td><span class="tag">${s.kind === 'featured' ? 'from overnight run' : 'generated here'}</span></td>
-      <td class="act">${s.kind === 'mine' ? '<button data-del="1">Delete</button>' : ''}</td>`;
-    tr.onclick = e => { if (e.target.dataset.del) return; select(s.id, label); };
-    const del = tr.querySelector('[data-del]');
-    if (del) del.onclick = async () => {
-      if (!confirm('Delete this sample?')) return;
+    tr.innerHTML = `<td></td><td>${s.seconds ? '~' + Math.round(s.seconds / 60 * 10) / 10 + ' min' : ''}</td><td class="act"><button data-del="1">Delete</button></td>`;
+    tr.firstChild.textContent = songLabel(s);
+    tr.onclick = e => { if (e.target.dataset.del) return; select(s.id); };
+    tr.querySelector('[data-del]').onclick = async () => {
+      if (!await UI.confirm('This song will be deleted from this Mac.', { title: 'Delete song?', ok: 'Delete', danger: true })) return;
       await api('/api/sample?id=' + encodeURIComponent(s.id), { method: 'DELETE' });
-      if (current === s.id) { stop(); current = null; data = null; showRoll(false); }
+      if (current === s.id) { $('audio').pause(); current = null; showPlayer(false); }
       loadLibrary();
     };
     body.appendChild(tr);
   }
-  const sel = $('cont');
-  const keep = sel.value;
-  sel.innerHTML = '<option value="">Nothing (brand new)</option>' +
-    samples.map(s => `<option value="${s.id}">${s.kind === 'featured' ? 'Featured ' + s.name.replace('sample_', '#') : s.name.replace(/^gen_/, 'Mine ')}</option>`).join('');
-  sel.value = keep;
-  if (selectId) { const s = samples.find(x => x.id === selectId); if (s) select(s.id, s.kind === 'mine' ? s.name.replace(/^gen_/, 'Mine ') : s.name); }
+  if (selectId) select(selectId);
 }
 
-async function select(id, label) {
-  stop();
-  current = id; offset = 0;
-  $('ptitle').textContent = label;
-  document.querySelectorAll('tr.row').forEach(r => r.classList.remove('sel'));
-  data = await api('/api/notes?id=' + encodeURIComponent(id));
-  $('play').disabled = $('stop').disabled = false;
-  const q = '/midi?id=' + encodeURIComponent(id);
-  $('dl').innerHTML = `<a href="${q}&part=both" download>${ico('download')} Both (.mid)</a><a href="${q}&part=piano" download>${ico('download')} Piano only</a><a href="${q}&part=guitar" download>${ico('download')} Guitar only</a>`;
-  showRoll(true); draw();
-  loadLibraryMarks();
-}
-function loadLibraryMarks() {
+function showPlayer(on) { $('pwrap').style.display = on ? '' : 'none'; $('empty').style.display = on ? 'none' : ''; }
+function select(id) {
+  const s = samples.find(x => x.id === id); if (!s) return;
+  current = id; $('audio').src = '/audio?id=' + encodeURIComponent(id);
+  $('ptitle').textContent = songLabel(s);
+  $('dl').innerHTML = `<a href="/audio?id=${encodeURIComponent(id)}&download=1" download>${ico('download')} Download (.wav)</a>`;
+  $('plyrtxt').textContent = (s.caption || '') + (s.lyrics ? '\n\n' + s.lyrics : '\n\n(instrumental)');
+  showPlayer(true);
   document.querySelectorAll('tr.row').forEach((r, i) => r.classList.toggle('sel', samples[i] && samples[i].id === current));
 }
-function showRoll(on) { $('roll').style.display = on ? 'block' : 'none'; $('empty').style.display = on ? 'none' : 'grid'; if (!on) { $('dl').innerHTML = ''; $('play').disabled = $('stop').disabled = true; $('ptitle').textContent = 'Select a sample below'; } }
-
-// ---- piano roll
-function visibleTracks() { return data ? data.tracks.filter(t => $('m_' + t.name) && $('m_' + t.name).checked) : []; }
-$('m_piano').onchange = $('m_guitar').onchange = () => { if (playing) { const p = pos(); stop(); offset = p; play(); } draw(); };
-function draw() {
-  const cv = $('roll');
-  if (!data) return;
-  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
-  cv.width = w * dpr; cv.height = h * dpr;
-  const g = cv.getContext('2d'); g.scale(dpr, dpr);
-  const all = data.tracks.flatMap(t => t.notes);
-  if (!all.length) return;
-  const lo = Math.min(...all.map(n => n[2])) - 2, hi = Math.max(...all.map(n => n[2])) + 2;
-  const dur = data.duration, col = COLORS();
-  const css = getComputedStyle(document.documentElement);
-  g.strokeStyle = css.getPropertyValue('--grid').trim(); g.lineWidth = 1;
-  for (let p = lo; p <= hi; p++) { if (p % 12 === 0) { const y = h - (p - lo) / (hi - lo + 1) * h; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
-  for (let s = 0; s < dur; s += 5) { const x = s / dur * w; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
-  for (const t of data.tracks) {
-    const on = $('m_' + t.name) && $('m_' + t.name).checked;
-    g.globalAlpha = on ? 0.9 : 0.12; g.fillStyle = col[t.name] || '#888';
-    for (const [s, d, p] of t.notes) g.fillRect(s / dur * w, h - (p - lo + 1) / (hi - lo + 1) * h, Math.max(2, d / dur * w), Math.max(2, h / (hi - lo + 1) - 1));
-  }
-  g.globalAlpha = 1;
-  const x = pos() / dur * w;
-  g.strokeStyle = css.getPropertyValue('--ink').trim(); g.lineWidth = 2;
-  g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
-}
-window.addEventListener('resize', draw);
-$('roll').onclick = e => {
-  if (!data) return;
-  const r = e.target.getBoundingClientRect();
-  const p = (e.clientX - r.left) / r.width * data.duration;
-  if (playing) { stop(); offset = p; play(); } else { offset = p; draw(); }
-};
-
-// ---- playback (small WebAudio synth, no downloads)
-const pos = () => playing ? Math.min(data.duration, offset + ctx.currentTime - t0) : offset;
-function mtof(p) { return 440 * Math.pow(2, (p - 69) / 12); }
-function drive(amount) {
-  const n = 1024, c = new Float32Array(n);
-  for (let i = 0; i < n; i++) { const x = i * 2 / n - 1; c[i] = Math.tanh(x * amount); }
-  return c;
-}
-function play() {
-  if (!data) return;
-  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-  ctx.resume();
-  stop(true);
-  playing = true; t0 = ctx.currentTime + 0.05;
-  const master = ctx.createGain(); master.gain.value = 0.35;
-  const comp = ctx.createDynamicsCompressor(); master.connect(comp); comp.connect(ctx.destination);
-  nodes = [master];
-  for (const t of visibleTracks()) {
-    const bus = ctx.createGain(); bus.gain.value = t.name === 'guitar' ? 0.5 : 0.8;
-    if (t.name === 'guitar') {
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
-      const sh = ctx.createWaveShaper(); sh.curve = drive(t.program === 29 ? 5 : 2); sh.oversample = '2x';
-      bus.connect(sh); sh.connect(lp); lp.connect(master);
-    } else bus.connect(master);
-    for (const [s, d, p, v] of t.notes) {
-      if (s + d < offset) continue;
-      const when = t0 + Math.max(0, s - offset), len = Math.max(0.08, d - Math.max(0, offset - s));
-      const o = ctx.createOscillator(), e = ctx.createGain();
-      o.frequency.value = mtof(p); const vel = (v / 127) * 0.6 + 0.1;
-      if (t.name === 'piano') {
-        o.type = 'triangle';
-        e.gain.setValueAtTime(0.0001, when); e.gain.exponentialRampToValueAtTime(vel, when + 0.008);
-        e.gain.exponentialRampToValueAtTime(vel * 0.25, when + Math.min(len, 1.2)); e.gain.exponentialRampToValueAtTime(0.0001, when + len + 0.35);
-        const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = mtof(p) * 2;
-        const e2 = ctx.createGain(); e2.gain.value = 0.18; o2.connect(e2); e2.connect(e); o2.start(when); o2.stop(when + len + 0.4);
-      } else {
-        o.type = 'sawtooth';
-        e.gain.setValueAtTime(0.0001, when); e.gain.exponentialRampToValueAtTime(vel, when + 0.015);
-        e.gain.setValueAtTime(vel * 0.8, when + len * 0.9); e.gain.exponentialRampToValueAtTime(0.0001, when + len + 0.12);
-      }
-      o.connect(e); e.connect(bus); o.start(when); o.stop(when + len + 0.4);
-      nodes.push(o);
-    }
-    nodes.push(bus);
-  }
-  $('play').innerHTML = ico('pause') + ' Pause';
-  tick();
-}
-function stop(keep) {
-  if (!keep && playing) offset = pos();
-  playing = false;
-  cancelAnimationFrame(raf);
-  for (const n of nodes) { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }
-  nodes = [];
-  $('play').innerHTML = ico('play') + ' Play';
-}
-function tick() {
-  if (!playing) return;
-  draw();
-  if (pos() >= data.duration) { stop(true); offset = 0; draw(); return; }
-  raf = requestAnimationFrame(tick);
-}
-$('play').onclick = () => { if (playing) stop(); else { if (offset >= data.duration - 0.1) offset = 0; play(); } };
-$('stop').onclick = () => { stop(true); offset = 0; draw(); };
-document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName) && !e.target.isContentEditable && $('tab-music').style.display !== 'none' && data) { e.preventDefault(); $('play').click(); } });
+function draw() {}
 
 // ---- generate
 async function followMusic(job, resumed) {
-  $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = resumed ? 'Reconnecting to your running generation…' : 'Starting…';
+  $('mstop').style.display = ''; $('mstop').disabled = false; $('mstop').textContent = 'Stop generating'; $('mstop').onclick = () => { $('mstop').disabled = true; $('mstop').textContent = 'Stopping...'; fetch('/api/music/cancel?id=' + job, { method: 'POST' }); };
+  $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = resumed ? 'Reconnecting to your running song...' : 'Starting...';
   try {
     let j;
     do {
-      await new Promise(r => setTimeout(r, resumed ? 300 : 1500)); resumed = false;
+      await new Promise(r => setTimeout(r, resumed ? 300 : 2000)); resumed = false;
       j = await api('/api/job?id=' + job);
-      if (j.message === 'unknown job') { $('status').textContent = 'The server was restarted, so that generation was lost.'; setJob('music', null); $('go').disabled = false; $('bar').style.display = 'none'; return; }
+      if (j.message === 'unknown job') { $('status').textContent = 'The server was restarted, so that song was lost.'; setJob('music', null); $('go').disabled = false; $('bar').style.display = 'none'; return; }
       $('status').textContent = j.message;
-      if (j.results.length) loadLibrary();
     } while (j.status === 'running');
-    $('status').textContent = j.status === 'error' ? 'Error: ' + j.message : j.message + (j.results.length ? ` · ${j.results.length} new` : '');
-    await loadLibrary(j.results[0]);
+    $('status').textContent = j.status === 'error' ? 'Error: ' + j.message : j.status === 'cancelled' ? 'Stopped. No song was made.' : 'Done';
+    if (j.results.length) await loadLibrary(j.results[0]);
   } catch (e) { $('status').textContent = 'Error: ' + e.message; }
-  setJob('music', null); $('go').disabled = false; $('bar').style.display = 'none';
+  setJob('music', null); $('go').disabled = false; $('bar').style.display = 'none'; $('mstop').style.display = 'none';
 }
+const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 $('go').onclick = async () => {
-  $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = 'Starting…';
-  const body = {
-    count: +$('count').value, tokens: +$('tokens').value, temp: +$('temp').value, rep: +$('rep').value,
-    need_both: $('both').checked, seed: $('seed').value, continue_id: $('cont').value, prompt_tokens: +$('pt').value,
-  };
+  const caption = $('mcap').value.trim();
+  if (!caption) { $('status').textContent = 'Write a caption first.'; $('mcap').focus(); return; }
+  $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = 'Starting...';
   try {
-    const { job } = await api('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const { job } = await post('/api/music/make', { caption, lyrics: $('mlyr').value, length: $('mlen').value });
     setJob('music', job); followMusic(job);
   } catch (e) { $('status').textContent = 'Error: ' + e.message; $('go').disabled = false; $('bar').style.display = 'none'; }
 };
 
-
-// ---- describe-it music prompt (the chosen model reads the request, then the music model writes it)
+// ---- describe-it prompt (the chosen model writes caption and lyrics, then surround makes the song)
 async function loadMusicModels() {
   try {
     const st = await api('/api/chat/status'), sel = $('mmodel'), saved = (LS.get('chat-settings') || {}).model;
@@ -550,17 +436,41 @@ async function loadMusicModels() {
   } catch (e) {}
 }
 $('mmodel').onchange = () => LS.set('music-model', $('mmodel').value);
+const writing = on => { $('mcreate').disabled = on; document.querySelectorAll('.wand').forEach(w => { w.disabled = on; w.classList.toggle('spin', on && w === wandBtn); }); };
+let wandBtn = null;
 $('mcreate').onclick = async () => {
   const text = $('mprompt').value.trim();
-  if (!text) { $('status').textContent = 'Describe the music first.'; $('mprompt').focus(); return; }
-  $('mcreate').disabled = $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = 'Reading your request…';
+  if (!text) { $('status').textContent = 'Describe the song first, or press the wand for a random idea.'; $('mprompt').focus(); return; }
+  writing(true); $('status').textContent = 'Your chat model is writing the caption and lyrics...';
   try {
-    const r = await api('/api/music/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text, model: $('mmodel').value }) });
-    const p = r.plan; $('status').textContent = `${p.count > 1 ? p.count + ' pieces' : '1 piece'}, ${p.length}, ${p.creativity}` + (r.reference ? ` · starting from ${r.reference.artist} in the library` : p.style ? ` · nothing by "${p.style}" in the library, writing a general piece` : '');
-    setJob('music', r.job); await followMusic(r.job);
-  } catch (e) { $('status').textContent = 'Error: ' + e.message; $('bar').style.display = 'none'; }
-  $('mcreate').disabled = false; $('go').disabled = false;
+    const r = await post('/api/music/prompt', { prompt: text, model: $('mmodel').value, instrumental: $('minst').checked });
+    $('mcap').value = r.plan.caption; $('mlyr').value = r.plan.lyrics; $('mlen').value = r.plan.length;
+    for (const id of ['mcap', 'mlyr', 'mlen']) $(id).dispatchEvent(new Event('change', { bubbles: true }));
+    $('status').textContent = 'Review or edit them, then press Generate song.';
+  } catch (e) { $('status').textContent = 'Error: ' + e.message; }
+  writing(false);
 };
+// wand inside each field: opens a small prompt; empty prompt = random idea (or something that fits the other field)
+const FIELD = { idea: { box: 'mprompt', ph: 'A few rough words, an artist or a song, or leave empty for a random idea' }, caption: { box: 'mcap', ph: 'Describe the sound, or leave empty for a random idea' }, lyrics: { box: 'mlyr', ph: 'Describe what the lyrics are about, or leave empty for a random idea' } };
+document.querySelectorAll('.wand').forEach(w => w.onclick = e => {
+  e.stopPropagation(); const pop = $('wandpop'), f = w.dataset.field;
+  if (!pop.hidden && wandBtn === w) { pop.hidden = true; return; }
+  wandBtn = w; pop.dataset.field = f; $('wandq').placeholder = FIELD[f].ph; $('wandq').value = '';
+  w.parentNode.appendChild(pop); pop.hidden = false; $('wandq').focus();
+});
+async function runWand() {
+  const f = $('wandpop').dataset.field, w = wandBtn; if (!f) return;
+  $('wandpop').hidden = true; writing(true); $('status').textContent = f === 'caption' ? 'Your chat model is writing the caption...' : 'Your chat model is writing the lyrics...';
+  try {
+    const r = await post('/api/music/field', { model: $('mmodel').value, field: f, prompt: $('wandq').value, caption: $('mcap').value, lyrics: $('mlyr').value, instrumental: $('minst').checked });
+    $(FIELD[f].box).value = r.text; $(FIELD[f].box).dispatchEvent(new Event('change', { bubbles: true }));
+    $('status').textContent = 'Written. Edit it if you like, then press Generate song.';
+  } catch (e) { $('status').textContent = 'Error: ' + e.message; }
+  writing(false);
+}
+$('wandgo').onclick = runWand;
+$('wandq').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runWand(); } else if (e.key === 'Escape') $('wandpop').hidden = true; });
+document.addEventListener('click', e => { if (!$('wandpop').hidden && !$('wandpop').contains(e.target) && !e.target.closest('.wand')) $('wandpop').hidden = true; });
 $('mprompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('mcreate').click(); });
 loadMusicModels();
 
@@ -621,7 +531,7 @@ async function loadHist() {
     const d = document.createElement('div'); d.className = 'it';
     d.innerHTML = `<img src="/img/${m.results[0]}" loading="lazy"><p>${m.prompt.replace(/</g, '&lt;')}</p><button style="padding:2px 8px;font-size:11px;margin-top:4px">Delete</button>`;
     d.onclick = e => { if (e.target.tagName === 'BUTTON') return; showResult(m, 0); scrollTo({ top: 0, behavior: 'smooth' }); };
-    d.querySelector('button').onclick = async () => { if (confirm('Delete this edit?')) { await api('/api/img/item?id=' + m.id, { method: 'DELETE' }); loadHist(); } };
+    d.querySelector('button').onclick = async () => { if (await UI.confirm('This picture edit will be deleted.', { title: 'Delete edit?', ok: 'Delete', danger: true })) { await api('/api/img/item?id=' + m.id, { method: 'DELETE' }); loadHist(); } };
     $('ihist').appendChild(d);
   }
 }
@@ -637,7 +547,7 @@ async function loadLoras() {
     const [cb, sc, del] = [d.querySelector('input[type=checkbox]'), d.querySelector('input[type=number]'), d.querySelector('button')];
     const set = body => api('/api/img/lora/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: l.name, ...body }) }).catch(e => $('lorastat').textContent = e.message);
     cb.onchange = () => set({ active: cb.checked }); sc.onchange = () => set({ scale: +sc.value });
-    del.onclick = async () => { if (confirm('Delete ' + l.name + ' from this Mac?')) { await api('/api/img/lora?name=' + encodeURIComponent(l.name), { method: 'DELETE' }); loadLoras(); } };
+    del.onclick = async () => { if (await UI.confirm(l.name + ' will be removed from this Mac.', { title: 'Delete LoRA?', ok: 'Delete', danger: true })) { await api('/api/img/lora?name=' + encodeURIComponent(l.name), { method: 'DELETE' }); loadLoras(); } };
     $('loralist').appendChild(d);
   }
 }
@@ -713,7 +623,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) live
 { const s = LS.get('jacobai-src'); if (s) setSource(s); }
 { const rj = LS.get('jacobai-jobs') || {}; if (rj.music) followMusic(rj.music, true); if (rj.img) followImg(rj.img, true); }
 
-loadLibrary().then(() => { const f = samples.find(s => s.kind === 'featured') || samples[0]; if (f) select(f.id, f.kind === 'featured' ? 'Featured ' + f.name.replace('sample_', '#') : f.name); });
+loadLibrary().then(() => { if (samples[0]) select(samples[0].id); });
 </script>
 <script src="/static/chat.js"></script>
 </body>
