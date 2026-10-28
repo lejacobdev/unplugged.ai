@@ -109,7 +109,7 @@ def _index(owner, doc, text):
         logbus.log("library", f"{doc['name']}: {doc['status']} ({doc.get('n', 0)} passages)" + (f" - {doc.get('error')}" if doc.get("error") else ""), owner["uid"])
 
 
-def add(owner, name, data):
+def add(owner, name, data, project=None):
     """Adds one file. Returns the document record at once; indexing continues in the background."""
     if len(_docs(owner)) >= MAX_DOCS:
         raise ValueError(f"The library is full ({MAX_DOCS} documents). Delete some first.")
@@ -117,22 +117,34 @@ def add(owner, name, data):
     if not text.strip():
         raise ValueError(f"No readable text in {name} ({note or kind}).")
     doc = {"id": uuid.uuid4().hex[:10], "name": name, "kind": kind, "size": len(data), "added": time.time(), "note": note,
-           "chars": len(text), "status": "indexing", "n": 0, "chunks": []}
+           "chars": len(text), "status": "indexing", "n": 0, "chunks": [], "project": project or None}
     _save(owner, doc)
     threading.Thread(target=_index, args=(owner, doc, text), daemon=True).start()
     return public(doc)
 
 
 def public(d):
-    return {k: d.get(k) for k in ("id", "name", "kind", "size", "added", "note", "chars", "status", "n", "error")}
+    return {k: d.get(k) for k in ("id", "name", "kind", "size", "added", "note", "chars", "status", "n", "error", "project")}
 
 
-def list_docs(owner):
-    return sorted((public(d) for d in _docs(owner).values()), key=lambda d: d["added"], reverse=True)
+def _visible(d, project):
+    """A chat in a project sees that project's documents and the ones outside any project; a chat outside projects sees only the latter."""
+    return d.get("project") in (None, project) if project else d.get("project") is None
 
 
-def count(owner):
-    return sum(1 for d in _docs(owner).values() if d.get("status") == "ready")
+def list_docs(owner, project=None):
+    """Documents of exactly this scope (the Library tab shows one scope at a time)."""
+    return sorted((public(d) for d in _docs(owner).values() if (d.get("project") or None) == (project or None)), key=lambda d: d["added"], reverse=True)
+
+
+def delete_project_docs(owner, project):
+    for d in list(_docs(owner).values()):
+        if d.get("project") == project:
+            delete(owner, d["id"])
+
+
+def count(owner, project=None):
+    return sum(1 for d in _docs(owner).values() if d.get("status") == "ready" and _visible(d, project))
 
 
 def delete(owner, doc_id):
@@ -159,7 +171,7 @@ def _matrix(owner):
         if d.get("status") != "ready":
             continue
         for i, c in enumerate(d["chunks"]):
-            vecs.append(c["v"]); meta.append((d["id"], d["name"], i, c["t"]))
+            vecs.append(c["v"]); meta.append((d["id"], d["name"], i, c["t"], d.get("project")))
     if not vecs:
         _cache[owner["uid"]] = (None, [])
         return _cache[owner["uid"]]
@@ -169,7 +181,7 @@ def _matrix(owner):
     return _cache[owner["uid"]]
 
 
-def search(owner, query, k=5, per_doc=3):
+def search(owner, query, k=5, per_doc=3, project=None):
     """Best passages for a question: [{doc, name, passage, text, score}]."""
     m, meta = _matrix(owner)
     if m is None:
@@ -179,8 +191,8 @@ def search(owner, query, k=5, per_doc=3):
     scores = m @ q
     out, used = [], {}
     for i in np.argsort(-scores):
-        did, name, idx, text = meta[i]
-        if used.get(did, 0) >= per_doc:
+        did, name, idx, text, proj = meta[i]
+        if not _visible({"project": proj}, project) or used.get(did, 0) >= per_doc:
             continue
         used[did] = used.get(did, 0) + 1
         out.append({"doc": did, "name": name, "passage": idx + 1, "text": text, "score": round(float(scores[i]), 3)})
@@ -189,9 +201,9 @@ def search(owner, query, k=5, per_doc=3):
     return out
 
 
-def prompt_block(owner):
+def prompt_block(owner, project=None):
     """A line for the system prompt naming the documents the model can search."""
-    names = [d["name"] for d in _docs(owner).values() if d.get("status") == "ready"]
+    names = [d["name"] for d in _docs(owner).values() if d.get("status") == "ready" and _visible(d, project)]
     if not names:
         return ""
     shown = ", ".join(names[:25]) + (f" and {len(names) - 25} more" if len(names) > 25 else "")

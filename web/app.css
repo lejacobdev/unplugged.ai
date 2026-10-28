@@ -669,3 +669,50 @@ pre.lyr { white-space: pre-wrap; font: inherit; font-size: 13.5px; color: var(--
 .libsearch input { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); padding: 11px 14px; font: inherit; font-size: 14.5px; box-sizing: border-box; }
 .libsearch input:focus { outline: none; border-color: var(--accent); }
 .libsearch button { height: 44px; }
+
+/* model manager */
+.mmprog { margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+.mmbar { height: 6px; background: var(--hover); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.mmbar i { display: block; height: 100%; width: 0; background: var(--accent, var(--ink)); transition: width .3s; }
+.mmsug { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.mmsug .chip { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.mmsug .chip:hover { background: var(--hover); }
+#mm-list .memrow small { color: var(--muted); margin-left: 6px; }
+
+/* code runs */
+.rundet { margin: 4px 0 8px; } .rundet summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.runout { margin: 6px 0; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font: 12.5px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; max-height: 260px; overflow: auto; }
+.runout.err { color: #d4554a; }
+.runimg { display: block; max-width: 100%; border-radius: 10px; margin: 8px 0; border: 1px solid var(--line); background: #fff; }
+.runfile { display: inline-flex; align-items: center; gap: 8px; margin: 4px 8px 4px 0; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); text-decoration: none; font-size: 13px; }
+.runfile:hover { background: var(--hover); } .runfile small { color: var(--muted); } .runfile svg { width: 16px; height: 16px; }
+
+.expwrap { position: relative; margin-left: auto; display: flex; }
+.expmenu { left: auto; right: 0; width: 190px; padding: 8px; }
+.expmenu button { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.expmenu button:hover { background: var(--hover); }
+.chead .incog#expbtn { margin-left: auto !important; }
+
+/* voice */
+#mic.rec { color: #fff; background: #d4554a; animation: micpulse 1.2s ease-in-out infinite; }
+#mic.busy { opacity: .5; }
+@keyframes micpulse { 50% { box-shadow: 0 0 0 6px rgba(212,85,74,.25); } }
+.acts button.on { color: var(--ink); background: var(--hover); }
+
+/* projects */
+.projrow { position: relative; padding: 0 12px 6px; }
+.projbtn { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px solid var(--line); background: none; color: var(--ink); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.projbtn:hover { background: var(--hover); } .projbtn span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .projbtn .i { width: 16px; height: 16px; flex: none; }
+.projmenu { left: 12px; right: 12px; width: auto; top: calc(100% - 2px); padding: 6px; max-height: 320px; overflow: auto; }
+.projmenu button, .tagwrap .expmenu button { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.projmenu button:hover, .tagwrap .expmenu button:hover { background: var(--hover); } .projmenu button.on, .tagwrap .expmenu button.on { font-weight: 600; }
+.tagwrap { margin-left: 10px; align-items: center; }
+.projtag { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.projtag:hover, .projtag.on { color: var(--ink); background: var(--hover); } .projtag[hidden] { display: none; }
+.chead .tagwrap + .expwrap, .chead .expwrap#x { margin-left: auto; }
+.pjform { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; } .pjform input, .pjform textarea { margin: 0 !important; }
+.pjform .setfoot button { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 10px; padding: 8px 16px; font: inherit; font-size: 14px; cursor: pointer; margin-right: 8px; }
+
+.tkrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .tkrow input, .tkrow select { margin: 0 !important; width: auto !important; } .tkrow input[type=number] { width: 80px !important; }
+.tkrow select { flex: 0 0 auto; width: 170px !important; } .tkrow #tk-model { width: 150px !important; } .tkrow input[type=time] { width: 120px !important; }
+.tkrow > .dd { flex: 0 0 auto; width: 170px; } .tkrow > .dd:last-child { width: 150px; }

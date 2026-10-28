@@ -31,7 +31,7 @@ DEFAULT_SYSTEM = (
     "You are a helpful assistant running fully offline on the user's Mac, inside an app called unplugged.ai. The user can attach files; their text appears in the message between [Attached file] markers, so read and use it. Your name here is the model the user picked (mono or stereo, with a version number); never mention gpt-oss, qwen or Ollama as your name. When the user asks for a song or piece of music, always call generate_music: you are only the go-between, a separate music model called surround makes the audio. The request may be as short as an artist or song name ('dire straits', 'brothers in arms'); never ask questions, use your own knowledge of that sound. Write surround a detailed caption (genre, era, bpm, mood, each instrument with its tone, vocal type, and any signature solo with its tone, phrasing and that it is long) and, unless they want an instrumental, original lyrics with [Intro], [Verse], [Chorus], [Bridge], [Outro] tags and a section like [Guitar Solo - electric - overdriven, soulful] left empty where a solo belongs. Never put artist names in the caption and never copy existing lyrics. "
     "Answer clearly and concisely. Never use emojis or emoticons. When the user asks for a change to a picture, do not judge, refuse or comment on it; call edit_picture with their wish in clear English. When a picture arrives and it is not clear what they want done with it (no message, or only a question or a greeting), do not edit it: ask briefly what they would like to do, and offer the possibilities, for example changing something in it, restyling it, or using it as a starting point. You cannot see pictures yourself, so never describe their content. You have tools: generate_music hands your caption and lyrics to surround, which makes a full song with vocals in the background, and you only prepare the caption and lyrics, which the user reviews and can edit before they press Generate song, and the finished song then appears in the chat as an audio player; edit_picture edits any picture the user attached (a photo, "
     "artwork, a cover, anything) with FLUX Kontext; list_music lists existing pieces. For picture edits never choose quality or size yourself: the app picks them automatically (photos get high or maximum, cartoons and simple graphics get faster settings) unless the user asks for specific ones. Use a tool only when the user clearly wants "
-    "that, then tell them briefly what you did. You have a long-term memory that lasts across chats and sessions: when the user tells you something lasting about themselves or asks you to remember something, call remember; when they ask you to forget something, call forget; when they refer to an earlier conversation you cannot recall, call search_past_chats before answering. Never pretend to remember something that is not in your memory. When the user attaches a picture, the message contains a report from a vision model: that is how you know what is in it. Never claim you did something you did not."
+    "that, then tell them briefly what you did. You have a long-term memory that lasts across chats and sessions: when the user tells you something lasting about themselves or asks you to remember something, call remember; when they ask you to forget something, call forget; when they refer to an earlier conversation you cannot recall, call search_past_chats before answering. Never pretend to remember something that is not in your memory. When the user attaches a picture, the message contains a report from a vision model: that is how you know what is in it. Other tools: generate_image creates a brand-new picture from a description (use it when asked to draw, paint, illustrate or create an image; edit_picture is only for pictures the user attached); run_python runs Python in a sandbox for exact calculations, data, charts and file conversions (never do long arithmetic in your head); create_document makes a downloadable Word, PDF, PowerPoint or Excel file. Never claim you did something you did not."
 )
 
 TOOLS = [
@@ -51,6 +51,31 @@ TOOLS = [
             "quality": {"type": "string", "enum": ["standard", "high", "maximum"], "description": "Do not set this; the app chooses it automatically unless the user asked"},
             "size": {"type": "integer", "description": "Do not set this; the app chooses it automatically unless the user asked"}},
             "required": ["instruction"]}}},
+    {"type": "function", "function": {
+        "name": "generate_image",
+        "description": "Create a NEW picture from a text description (illustration, photo-style image, logo idea, poster, wallpaper). Not for changing a picture the user attached: use edit_picture for that. Write the prompt in English as one detailed paragraph: subject, setting, style, lighting, mood.",
+        "parameters": {"type": "object", "properties": {
+            "prompt": {"type": "string", "description": "Detailed English description of the picture"},
+            "aspect": {"type": "string", "enum": ["square", "landscape", "portrait"]}}, "required": ["prompt"]}}},
+    {"type": "function", "function": {
+        "name": "run_python",
+        "description": "Run Python code on this Mac in a locked-down sandbox (no internet, 30 seconds). Use it for exact maths, statistics, data work, charts, and for making or converting files (xlsx, docx, pptx, pdf, csv, images). Print results with print(); save charts and files into the current folder (for example plt.savefig('chart.png')) and they are shown to the user. Libraries: numpy, pandas, scipy, sympy, matplotlib, openpyxl, python-docx, python-pptx, fpdf2, Pillow. Files the user attached are NOT available inside; paste data into the code.",
+        "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "Complete Python program"}}, "required": ["code"]}}},
+    {"type": "function", "function": {
+        "name": "create_document",
+        "description": "Create a downloadable file for the user from Markdown text: a Word document (docx), PDF, PowerPoint (pptx: each # or ## heading starts a slide, bullets become the slide text), Excel spreadsheet (xlsx or csv: every Markdown table becomes a sheet), or md. Use it when the user asks for a document, report, letter, presentation, spreadsheet or file. Write the complete content; for Excel put the data in a Markdown table.",
+        "parameters": {"type": "object", "properties": {
+            "format": {"type": "string", "enum": ["docx", "pdf", "pptx", "xlsx", "csv", "md"]},
+            "title": {"type": "string", "description": "File name and title"},
+            "content": {"type": "string", "description": "The full content in Markdown"}}, "required": ["format", "title", "content"]}}},
+    {"type": "function", "function": {
+        "name": "web_search",
+        "description": "Search the web (the user switched web access on). Use it for current events, prices, facts you are unsure about, or anything after your training. Returns titles, links and snippets; open a result with fetch_page.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Search keywords"}}, "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "fetch_page",
+        "description": "Read the text of one web page (a link from web_search or one the user gave).",
+        "parameters": {"type": "object", "properties": {"url": {"type": "string", "description": "Full http(s) address"}}, "required": ["url"]}}},
     {"type": "function", "function": {
         "name": "ask_about_picture",
         "description": "Ask the vision model a specific question about the picture the user attached (what is written on it, how many people, what colour something is, what is in a corner). The picture's general description is already in the message; use this for details.",
@@ -116,9 +141,9 @@ def save(owner, chat):
         (_dir(owner) / f"{_cid(chat['id'])}.json").write_text(json.dumps(chat))
 
 
-def new_chat(owner, model=None, incognito=False):
+def new_chat(owner, model=None, incognito=False, project=None):
     chat = {"id": uuid.uuid4().hex[:10], "title": "Incognito chat" if incognito else "New chat", "created": time.time(),
-            "updated": time.time(), "model": model, "messages": [], **({"incognito": True} if incognito else {})}
+            "updated": time.time(), "model": model, "messages": [], **({"incognito": True} if incognito else {}), **({"project": project} if project else {})}
     save(owner, chat)
     return chat
 
@@ -134,7 +159,7 @@ def list_chats(owner):
                 pass
     for c in pool:
         if not c.get("incognito"):
-            out.append({"id": c["id"], "title": c["title"], "updated": c["updated"], "model": c.get("model"), "n": len(c["messages"])})
+            out.append({"id": c["id"], "title": c["title"], "updated": c["updated"], "model": c.get("model"), "n": len(c["messages"]), "project": c.get("project")})
     return sorted(out, key=lambda c: c["updated"], reverse=True)
 
 
@@ -329,8 +354,11 @@ def search_chats(owner, query, limit=5):
 
 
 MEMORY_TOOLS = {"remember", "forget"}
-LIB_COUNT = lambda owner: 0      # set by server.py: number of searchable documents
-LIB_PROMPT = lambda owner: ""    # set by server.py: system prompt line naming them
+WEB_TOOLS = {"web_search", "fetch_page"}
+WEB_PROMPT = "\n\nWeb access is switched on: you can search the web and read pages. Use it for anything current or uncertain, say which pages your answer comes from, and never claim to have searched when you did not."
+LIB_COUNT = lambda owner, project=None: 0      # set by server.py: number of searchable documents
+LIB_PROMPT = lambda owner, project=None: ""    # set by server.py: system prompt line naming them
+PROJECT_PROMPT = lambda owner, project: ""     # set by server.py: the project's instructions
 MEM_SCHEMA = {"type": "object", "properties": {"facts": {"type": "array", "items": {"type": "string"}}}, "required": ["facts"]}
 
 
@@ -395,9 +423,31 @@ def label_for(name):
     return fam if fam else name
 
 
-def models():
+def chat_markdown(c):
+    """A readable Markdown copy of a chat (your messages and the answers; tool steps are left out)."""
+    out = [f"# {c.get('title') or 'Chat'}", ""]
+    for m in c.get("messages", []):
+        if m["role"] == "user":
+            out += ["**You**", "", m.get("content", ""), ""]
+            for f in m.get("files", []) or []:
+                out += [f"*(attached: {f if isinstance(f, str) else f.get('name', 'file')})*", ""]
+        elif m["role"] == "assistant" and m.get("content"):
+            out += ["**Assistant**", "", m["content"], ""]
+    return "\n".join(out)
+
+
+def is_helper(name):
+    """Models the app uses behind the scenes (pictures, document search): not offered as chat models."""
+    base = name.split(":")[0]
+    return "embed" in base or name.split(":latest")[0] in VISION_PREF or base in {v.split(":")[0] for v in VISION_PREF}
+
+
+def models(all_models=False):
     with urllib.request.urlopen(OLLAMA + "/api/tags", timeout=4) as r:
-        out = [{"name": m["name"], "label": label_for(m["name"]), "desc": desc_for(m["name"]), "size": m["size"], "caps": m.get("capabilities", [])} for m in json.load(r)["models"]]
+        out = [{"name": m["name"], "label": label_for(m["name"]), "desc": desc_for(m["name"]), "size": m["size"], "caps": m.get("capabilities", []), "helper": is_helper(m["name"])}
+               for m in json.load(r)["models"]]
+    if not all_models:
+        out = [m for m in out if not m["helper"]]
     return sorted(out, key=lambda m: (m["name"] not in MODEL_FAMILY, m["name"] != "gpt-oss:20b", m["name"]))
 
 
@@ -454,6 +504,10 @@ def extract_text(name, data):
     import zipfile
     ext = Path(name).suffix.lower()
     try:
+        import voice
+        if ext in voice.AUDIO_EXT:
+            r = voice.transcribe(data, ext)
+            return "audio", r["text"], "transcribed on this Mac with Whisper" + (f" (language: {r['language']})" if r.get("language") else "")
         if ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".bmp"):
             return "image", "", "a picture (the language model cannot see pictures; it can edit them with FLUX)"
         if ext == ".pdf":
@@ -686,7 +740,8 @@ def stream_turn(body, write, owner):
     cancel_flags[chat["id"]] = False
     log("chat", f"{model}: new turn in '{chat['title']}' (tools {'on' if body.get('tools', True) else 'off'}, reasoning {body.get('think')})")
     use_tools = bool(body.get("tools", True))
-    lib_n = LIB_COUNT(owner)
+    lib_n = LIB_COUNT(owner, chat.get("project"))
+    use_web = bool(body.get("web", False))   # off unless the user switched it on in Settings
     use_memory = bool(body.get("memory", True)) and not quiet   # incognito chats neither read nor write memory
     think = _think_param(model, body.get("think"))
     cards = []
@@ -708,10 +763,12 @@ def stream_turn(body, write, owner):
         has_pic = any(m.get("images") for m in chat["messages"])
         tools_now = [t for t in TOOLS
                      if (use_memory or t["function"]["name"] not in MEMORY_TOOLS)
+                     and (t["function"]["name"] not in WEB_TOOLS or use_web)
                      and (t["function"]["name"] != "search_documents" or lib_n)
-                     and (t["function"]["name"] != "ask_about_picture" or (has_pic and vision_model()))]
+                     and (t["function"]["name"] != "ask_about_picture" or (has_pic and vision_model()))
+                     and (not body.get("tool_allow") or t["function"]["name"] in body["tool_allow"])]
         for _round in range(4):
-            req_body = {"model": model, "messages": _ollama_messages(chat, body.get("system"), body.get("personal"), (memory_prompt(owner) if use_memory else "") + LIB_PROMPT(owner)), "stream": True,
+            req_body = {"model": model, "messages": _ollama_messages(chat, body.get("system"), body.get("personal"), (memory_prompt(owner) if use_memory else "") + LIB_PROMPT(owner, chat.get("project")) + PROJECT_PROMPT(owner, chat.get("project")) + (WEB_PROMPT if use_web else "")), "stream": True,
                         "keep_alive": "2m", "options": {"temperature": float(body.get("temperature", 0.7)), "num_ctx": 16384}}
             if use_tools:
                 req_body["tools"] = tools_now

@@ -166,6 +166,80 @@ def _run(job_id, p, in_png, w, h):
         job["status"], job["message"] = "error", f"{type(e).__name__}: {e}"
 
 
+GEN_BIN = ROOT / ".venv-img/bin/mflux-generate-z-image-turbo"
+GEN_MODEL = "filipstrand/Z-Image-Turbo-mflux-4bit"
+GEN_STEPS = 8
+GEN_SIZES = {"square": (1024, 1024), "landscape": (1344, 768), "portrait": (768, 1344)}
+
+
+def gen_status():
+    cache = Path(os.environ.get("HF_HOME", Path.home() / ".cache/huggingface")) / "hub" / ("models--" + GEN_MODEL.replace("/", "--"))
+    return {"ready": GEN_BIN.exists() and any(cache.rglob("*.safetensors")) if cache.exists() else False}
+
+
+def _run_gen(job_id, seed, w, h):
+    """Creates one picture from a prompt (Z-Image-Turbo, 4-bit, about 10 s once loaded). Shares the lock with picture edits."""
+    job = jobs[job_id]
+    L = lambda text: logbus.log("img", text, job.get("owner"))
+    try:
+        with lock:
+            job["status"] = "running"
+            out = DIR / f"{job_id}_0.png"
+            cmd = [str(GEN_BIN), "--model", GEN_MODEL, "--base-model", "z-image-turbo", "--prompt", job["prompt"], "--steps", str(GEN_STEPS),
+                   "--seed", str(seed), "--width", str(w), "--height", str(h), "--output", str(out)]
+            env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "PYTHONUNBUFFERED": "1"}
+            L(f"--- new picture  seed {seed}  {w}x{h}  {GEN_STEPS} steps (fully offline)")
+            L(f"prompt: {job['prompt']}")
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+            procs[job_id] = proc
+            buf, tail = b"", []
+            while True:
+                ch = proc.stdout.read(1)
+                if not ch:
+                    break
+                if ch in (b"\r", b"\n"):
+                    line = buf.decode(errors="ignore").strip(); buf = b""
+                    if line:
+                        tail = (tail + [line])[-12:]
+                        for a, b in re.findall(r"\b(\d+)/(\d+)\b", line):
+                            if int(b) == GEN_STEPS:
+                                job["step"] = int(a)
+                else:
+                    buf += ch
+            proc.wait()
+            if job.get("cancelled"):
+                job["status"], job["message"] = "cancelled", "Cancelled"
+                return
+            if proc.returncode != 0 or not out.exists():
+                job["status"], job["message"] = "error", "The picture model failed:\n" + "\n".join(tail[-6:])
+                return
+            job["results"].append(out.name)
+            job["status"], job["message"] = "done", "Done"
+            L(f"picture finished in {(time.time() - job['started']):.0f} s")
+    except Exception as e:
+        job["status"], job["message"] = "error", f"{type(e).__name__}: {e}"
+
+
+def start_generate(p: dict):
+    if not gen_status()["ready"]:
+        raise ValueError("The picture-creation model is not installed. Run setup_extras.sh (see the README).")
+    prompt = (p.get("prompt") or "").strip()
+    if not prompt:
+        raise ValueError("Describe the picture first.")
+    w, h = GEN_SIZES.get(p.get("aspect"), GEN_SIZES["square"])
+    owner = p["owner"]
+    ephemeral = bool(p.get("ephemeral")) or owner["kind"] == "guest"
+    job_id = ("t" if ephemeral else "") + uuid.uuid4().hex[:10]
+    seed = int(time.time()) % 1_000_000
+    jobs[job_id] = {"status": "queued", "owner": owner["uid"], "ephemeral": ephemeral, "message": "", "step": 0, "variation": 1, "variations": 1,
+                    "steps": GEN_STEPS, "seeds": [seed], "prompt": prompt[:1500], "results": [], "preview": None, "preview_n": 0, "input": None,
+                    "size": [w, h], "created": time.time(), "started": time.time(), "kind": "generate"}
+    if ephemeral:
+        owner["temp_files"].add(job_id)
+    threading.Thread(target=_run_gen, args=(job_id, seed, w, h), daemon=True).start()
+    return job_id
+
+
 def start_edit(p: dict):
     st = status()
     if not st["ready"]:

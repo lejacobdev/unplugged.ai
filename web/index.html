@@ -108,6 +108,8 @@
 <aside class="side" id="side">
   <div class="brand" id="brand" role="button" tabindex="0" title="New chat"><img class="logo" src="/icons/icon-192.png" alt="" width="24" height="24"> unplugged.ai</div>
   <div class="newrow"><button class="newchat" id="newchat"><i data-i="compose"></i> New chat</button></div>
+  <div class="projrow"><button type="button" class="projbtn" id="projbtn" aria-haspopup="true" title="Projects"><i data-i="folder"></i><span id="projname">All chats</span><i data-i="chevron"></i></button>
+    <div class="modelmenu projmenu" id="projmenu" hidden></div></div>
   <nav class="nav">
     <button data-tab="chat" class="on"><i data-i="message"></i> Chat</button>
     <button data-tab="music"><i data-i="music"></i> Music</button>
@@ -145,7 +147,11 @@
       </div>
     </div>
     <span class="ttl" id="ttl">New chat</span>
-    <button class="incog" id="incog" type="button" title="Incognito chat: not saved, gone when you leave it" aria-pressed="false"><i data-i="incognito"></i></button>
+    <div class="expwrap tagwrap"><button type="button" class="projtag" id="projtag" hidden title="Move this chat to a project"></button><div class="modelmenu expmenu" id="tagmenu" hidden></div></div>
+    <div class="expwrap"><button class="incog" id="expbtn" type="button" title="Export this chat" aria-haspopup="true" style="margin-left:auto"><i data-i="download"></i></button>
+      <div class="modelmenu expmenu" id="expmenu" hidden><div class="mm-label">Export this chat as</div>
+        <button type="button" data-f="pdf">PDF</button><button type="button" data-f="docx">Word</button><button type="button" data-f="md">Markdown</button></div></div>
+    <button class="incog" id="incog" style="margin-left:0" type="button" title="Incognito chat: not saved, gone when you leave it" aria-pressed="false"><i data-i="incognito"></i></button>
   </div>
   <div class="banner" id="banner"></div>
   <div class="msgs" id="msgs"><div class="inner" id="inner"></div></div>
@@ -157,6 +163,7 @@
           <label class="am-item" id="am-tools" title="Let the model make music and edit pictures for you"><i data-i="settings"></i><span>Tools (music and pictures)</span><input type="checkbox" id="am-toolsbox" class="switch"></label>
         </div></div><input type="file" id="attfile" multiple hidden>
       <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
+      <button id="mic" class="roundbtn" type="button" title="Dictate (speech to text on this Mac)"><i data-i="mic"></i></button>
       <button class="send" id="send" title="Send"><i data-i="arrowup"></i></button></div>
   </div><div class="disclaimer">Runs fully offline on your Mac. Answers can be wrong.</div></div>
 </section>
@@ -212,7 +219,7 @@
 
 <main id="tab-library" style="display:none">
   <section class="card libwrap">
-    <h2>Library <span class="hint" style="font-weight:400">your own documents, searchable by the chat models</span></h2>
+    <h2>Library <span class="hint" style="font-weight:400" id="libscope">your own documents, searchable by the chat models</span></h2>
     <p class="hint" id="lib-hint">Add PDFs, Word files, notes or code. They are split into passages and indexed on this Mac; nothing is uploaded anywhere. In a chat, ask about them (for example "what does my contract say about notice periods?") and the model searches them and names the file.</p>
     <div class="drop libdrop" id="libdrop">Drop files here, or click to choose<input type="file" id="libfile" multiple hidden></div>
     <div class="libsearch"><input id="libq" placeholder="Search your documents (finds passages by meaning)"><button type="button" id="libgo">Search</button></div>
@@ -310,6 +317,10 @@
     <button data-s="general" class="on">General</button>
     <button data-s="personal">Personalization</button>
     <button data-s="memory">Memory</button>
+    <button data-s="projects">Projects</button>
+    <button data-s="tasks">Tasks</button>
+    <button data-s="models">Models</button>
+    <button data-s="api">API</button>
   </nav>
   <div class="setpane">
     <section data-s="general">
@@ -318,6 +329,9 @@
       <div class="setrow"><div><b>Enter sends the message</b><small>Off: Enter adds a new line and Cmd/Ctrl+Enter sends.</small></div><input type="checkbox" id="s-enter" class="switch"></div>
       <div class="setrow"><div><b>Default model</b><small>Used for new chats on this device.</small></div><select id="s-model"></select></div>
       <div class="setrow"><div><b>Default reasoning</b><small>How long the model thinks before answering.</small></div><select id="s-think"><option value="off">Off</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
+      <div class="setrow"><div><b>Read answers aloud</b><small>Speaks every answer with a voice from this Mac when it is finished. You can also press the speaker under any answer.</small></div><input type="checkbox" id="s-speak" class="switch"></div>
+      <div class="setrow"><div><b>Voice</b><small>The voices installed on this Mac. More under System Settings, Accessibility, Spoken Content.</small></div><select id="s-voice"></select></div>
+      <div class="setrow"><div><b>Web access</b><small>Lets the model search the web and read pages. Off keeps everything on this Mac. When on, searches and pages leave it.</small></div><input type="checkbox" id="s-web" class="switch"></div>
       <div class="setrow"><div><b>Tools</b><small>Let the model make music and edit pictures for you.</small></div><input type="checkbox" id="s-tools" class="switch"></div>
     </section>
     <section data-s="personal" hidden>
@@ -334,6 +348,38 @@
       <div class="memadd"><input id="m-new" maxlength="240" placeholder="Add something for it to remember"><button type="button" id="m-add">Add</button></div>
       <div class="memlist" id="m-list"></div>
       <div class="setfoot"><button id="m-clear" type="button">Clear all memory</button></div>
+    </section>
+    <section data-s="projects" hidden>
+      <p class="hint">A project gives chats their own instructions and their own documents. Pick one in the sidebar; new chats and the Library then belong to it. Memory is shared with everything else.</p>
+      <div class="memlist" id="pj-list"></div>
+      <div class="pjform"><input id="pj-name" maxlength="60" placeholder="Project name"><textarea id="pj-instr" rows="5" maxlength="4000" placeholder="Instructions for every chat in this project (optional), for example: Answer as a patient maths tutor. Use metric units."></textarea>
+        <div class="setfoot" style="margin-top:8px"><button type="button" id="pj-save">Add project</button><button type="button" id="pj-cancel" hidden>Cancel</button></div></div>
+    </section>
+    <section data-s="api" hidden>
+      <p class="hint">Other programs (editors, scripts, apps) can use your models through an OpenAI-compatible API. Nothing is saved from API calls and they do not use your memory. Keys work from this Mac and from other devices on your network.</p>
+      <div class="setrow"><div><b>Base URL</b><small id="api-url"></small></div></div>
+      <div class="memadd"><input id="api-name" maxlength="60" placeholder="Name for a new key, for example my editor"><button type="button" id="api-add">Create key</button></div>
+      <div class="memlist" id="api-list"></div>
+    </section>
+    <section data-s="tasks" hidden>
+      <p class="hint">Tasks run by themselves at the time you set and leave their answer as a chat in your list. They run only while this Mac is on and the server is running (it starts at login). Tasks may use the code sandbox, document files and your library, never the web, music or pictures.</p>
+      <div class="memlist" id="tk-list"></div>
+      <div class="pjform">
+        <input id="tk-name" maxlength="60" placeholder="Task name, for example Morning summary">
+        <textarea id="tk-prompt" rows="4" maxlength="4000" placeholder="What should it do? For example: Summarize the files in the folder below in five bullet points and list any deadlines."></textarea>
+        <div class="tkrow"><select id="tk-type"><option value="daily">Every day at</option><option value="every">Every</option></select>
+          <input id="tk-time" type="time" value="08:00"><input id="tk-hours" type="number" min="1" max="720" value="24" hidden><span id="tk-hrs" hidden>hours</span>
+          <select id="tk-model"></select></div>
+        <input id="tk-folder" placeholder="Folder to read (optional), for example /Users/you/Documents/Reports">
+        <div class="setfoot" style="margin-top:8px"><button type="button" id="tk-save">Add task</button><button type="button" id="tk-cancel" hidden>Cancel</button></div>
+      </div>
+    </section>
+    <section data-s="models" hidden>
+      <p class="hint" id="mm-hint">Models run on this Mac. Downloading one needs the internet once; after that it works offline.</p>
+      <div class="memadd"><input id="mm-new" maxlength="80" placeholder="Model name, for example qwen3:14b"><button type="button" id="mm-go">Download</button></div>
+      <div class="mmprog" id="mm-prog" hidden><div class="mmbar"><i id="mm-bar"></i></div><span id="mm-txt"></span></div>
+      <div class="mmsug" id="mm-sug"></div>
+      <div class="memlist" id="mm-list"></div>
     </section>
   </div>
 </div></dialog>

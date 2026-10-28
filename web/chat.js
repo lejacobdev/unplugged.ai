@@ -102,7 +102,7 @@
   let chats = [], cur = { id: null, messages: [], title: 'New chat' }, streaming = false, ctrl = null, attached = null, files = [];
   const S = Store.get('chat-settings') || {};
   const settings = { model: S.model || 'gpt-oss:20b', think: S.think || 'low', tools: S.tools !== false, system: S.system || '' };
-  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true, memory: true }, Store.get('prefs') || {});
+  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true, memory: true, web: false, speak: false, voice: '' }, Store.get('prefs') || {});
   const savePrefs = () => Store.set('prefs', PF);
   const saveSettings = () => Store.set('chat-settings', settings);
 
@@ -155,9 +155,30 @@
   // ---------- history list
   let listSig = '';
   async function loadList() { const f = await J('/api/chat/list'), sig = JSON.stringify(f) + '|' + (cur && cur.id); if (sig === listSig) return; listSig = sig; chats = f; renderList(); }
+  // ---------- projects
+  const PROJ = window.PROJ = {
+    list: [], active: LS.get('active-project') || '',
+    async load() { try { this.list = (await J('/api/projects')).items; } catch (e) {} if (this.active && !this.list.find(p => p.id === this.active)) this.active = ''; syncProj(); },
+    name(id) { return (this.list.find(p => p.id === id) || {}).name || ''; },
+    set(id) { this.active = id || ''; LS.set('active-project', this.active); syncProj(); renderList(); if (el('tab-library').style.display !== 'none') loadLib(); },
+  };
+  function menuOf(menu, rows) { menu.innerHTML = ''; for (const [label, id, on] of rows) { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (on) b.classList.add('on'); b.dataset.id = id; menu.appendChild(b); } }
+  function syncProj() {
+    el('projname').textContent = PROJ.name(PROJ.active) || 'All chats';
+    menuOf(el('projmenu'), [['All chats', '', !PROJ.active], ...PROJ.list.map(p => [p.name, p.id, p.id === PROJ.active]), ['Manage projects…', '#manage', false]]);
+    const tag = el('projtag'); tag.hidden = !PROJ.list.length || !!(cur && cur.incognito);
+    const pn = cur && PROJ.name(cur.project); tag.textContent = pn || 'No project'; tag.classList.toggle('on', !!pn);
+    menuOf(el('tagmenu'), [['No project', '', !(cur && cur.project)], ...PROJ.list.map(p => [p.name, p.id, !!cur && cur.project === p.id])]);
+    el('libscope').textContent = PROJ.active ? 'project: ' + PROJ.name(PROJ.active) : 'your own documents, searchable by the chat models';
+  }
+  el('projbtn').onclick = e => { e.stopPropagation(); el('projmenu').hidden = !el('projmenu').hidden; };
+  el('projmenu').onclick = e => { const b = e.target.closest('button'); if (!b) return; el('projmenu').hidden = true; if (b.dataset.id === '#manage') return window.openSettings && window.openSettings('projects'); PROJ.set(b.dataset.id); };
+  el('projtag').onclick = e => { e.stopPropagation(); el('tagmenu').hidden = !el('tagmenu').hidden; };
+  el('tagmenu').onclick = async e => { const b = e.target.closest('button'); if (!b) return; el('tagmenu').hidden = true; cur.project = b.dataset.id || undefined; if (cur.id) await post('/api/chat/project', { id: cur.id, project: b.dataset.id }); syncProj(); loadList(); };
+  document.addEventListener('click', e => { if (!e.target.closest('.projrow')) el('projmenu').hidden = true; if (!e.target.closest('.tagwrap')) el('tagmenu').hidden = true; });
   function renderList() {
     const day = 86400, now = Date.now() / 1000, groups = { Today: [], Yesterday: [], 'Previous 7 days': [], Older: [] };
-    for (const c of chats) { const d = now - c.updated; (d < day ? groups.Today : d < 2 * day ? groups.Yesterday : d < 7 * day ? groups['Previous 7 days'] : groups.Older).push(c); }
+    for (const c of chats.filter(x => !PROJ.active || x.project === PROJ.active)) { const d = now - c.updated; (d < day ? groups.Today : d < 2 * day ? groups.Yesterday : d < 7 * day ? groups['Previous 7 days'] : groups.Older).push(c); }
     const h = el('hist'); h.innerHTML = '';
     for (const [name, list] of Object.entries(groups)) {
       if (!list.length) continue;
@@ -194,10 +215,14 @@
   async function openChat(id) {
     if (streaming) return;
     leaveIncognito();
-    cur = await J('/api/chat/get?id=' + id); showTab('chat'); render(); renderList();
+    cur = await J('/api/chat/get?id=' + id); showTab('chat'); render(); renderList(); syncProj();
   }
-  function newChat(incognito) { if (streaming) return; leaveIncognito(); cur = { id: null, messages: [], title: incognito === true ? 'Incognito chat' : 'New chat', incognito: incognito === true }; attached = null; renderAttach(); showTab('chat'); render(); renderList(); el('input').focus(); }
+  function newChat(incognito) { if (streaming) return; leaveIncognito(); cur = { id: null, messages: [], title: incognito === true ? 'Incognito chat' : 'New chat', incognito: incognito === true, project: incognito === true ? undefined : PROJ.active || undefined }; syncProj(); attached = null; renderAttach(); showTab('chat'); render(); renderList(); el('input').focus(); }
   el('newchat').onclick = () => newChat(false);
+  const expMenu = el('expmenu');
+  el('expbtn').onclick = e => { e.stopPropagation(); expMenu.hidden = !expMenu.hidden; };
+  document.addEventListener('click', e => { if (!e.target.closest('.expwrap')) expMenu.hidden = true; });
+  expMenu.onclick = e => { const b = e.target.closest('button'); if (!b) return; expMenu.hidden = true; if (!cur || !cur.messages || !cur.messages.length) return UI.alert('There is nothing in this chat to export yet.'); location.href = '/api/chat/export?id=' + encodeURIComponent(cur.id) + '&format=' + b.dataset.f; };
   el('brand').onclick = () => el('newchat').click();
   el('brand').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el('newchat').click(); } };
   el('incog').onclick = () => newChat(!(cur && cur.incognito));
@@ -223,12 +248,14 @@
   new ResizeObserver(syncArrow).observe(el('inner'));
   function toolCard(name, args, text, card, running) {
     const d = document.createElement('div'); d.className = 'tool' + (running ? '' : ' done');
-    const label = { generate_music: 'Making music', edit_picture: 'Editing picture', list_music: 'Looking up your music', look_at_picture: 'Looking at the picture', ask_about_picture: 'Looking closer at the picture', search_documents: 'Searching your documents', remember: 'Saving to memory', forget: 'Removing from memory', search_past_chats: 'Searching earlier chats' }[name] || name;
+    const label = { generate_music: 'Making music', edit_picture: 'Editing picture', list_music: 'Looking up your music', look_at_picture: 'Looking at the picture', ask_about_picture: 'Looking closer at the picture', search_documents: 'Searching your documents', remember: 'Saving to memory', forget: 'Removing from memory', search_past_chats: 'Searching earlier chats', run_python: 'Running code', generate_image: 'Creating a picture', web_search: 'Searching the web', fetch_page: 'Reading a web page' }[name] || name;
     d.innerHTML = `<div class="h"><i></i>${running ? label + '…' : label}</div><div class="b"></div>`;
     const b = d.querySelector('.b');
     if (running) { b.textContent = args && Object.keys(args).length ? JSON.stringify(args) : ''; return d; }
     if (card && card.kind === 'music') {
       musicPlayer(b, card.id);
+    } else if (card && card.kind === 'run') {
+      runCard(b, card);
     } else if (card && card.kind === 'music_draft') {
       musicDraft(b, card);
     } else if (card && card.kind === 'music_job') {
@@ -237,6 +264,18 @@
       b.textContent = 'Starting…'; pollImage(card.job, b);
     } else b.textContent = (text || '').slice(0, 300);
     return d;
+  }
+  function runCard(b, c) {
+    const u = n => '/api/run/file?run=' + c.id + '&name=' + encodeURIComponent(n);
+    if (c.code) { const det = document.createElement('details'); det.className = 'rundet'; const sm = document.createElement('summary'); sm.textContent = c.ok ? 'Code' : 'Code (failed)';
+    const pre = document.createElement('div'); pre.className = 'codeblk'; pre.innerHTML = '<div class="codehead"><span>python</span></div><pre><code></code></pre>';
+    pre.querySelector('code').innerHTML = window.hl ? hl(c.code, 'python') : esc(c.code); det.append(sm, pre); b.appendChild(det); }
+    if (c.stdout && c.stdout.trim()) { const o = document.createElement('pre'); o.className = 'runout'; o.textContent = c.stdout.trim(); b.appendChild(o); }
+    if (c.stderr && c.stderr.trim()) { const o = document.createElement('pre'); o.className = 'runout err'; o.textContent = c.stderr.trim(); b.appendChild(o); }
+    for (const f of c.files || []) {
+      if (f.image && /\.(png|jpe?g|gif|webp)$/i.test(f.name)) { const im = document.createElement('img'); im.className = 'runimg'; im.src = u(f.name); im.alt = f.name; b.appendChild(im); }
+      const a = document.createElement('a'); a.className = 'runfile'; a.href = u(f.name) + '&download=1'; a.download = f.name; a.innerHTML = ico('file') + '<span></span><small></small>'; a.querySelector('span').textContent = f.name; a.querySelector('small').textContent = fmtSize(f.size); b.appendChild(a);
+    }
   }
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -296,7 +335,7 @@
       if (j.status === 'running' || j.status === 'queued') {
         const total = j.steps * j.variations, done = (Math.max(j.variation, 1) - 1) * j.steps + j.step, el = Date.now() / 1000 - j.started;
         fill.style.width = (done / total * 100).toFixed(1) + '%';
-        txt.textContent = j.step ? `Editing… step ${j.step} of ${j.steps} · ${mmss(el)} elapsed` + (done > 2 ? ` · about ${mmss(el / done * (total - done))} left` : '') : `Loading the model… ${mmss(el)}`;
+        txt.textContent = j.step ? `${j.kind === 'generate' ? 'Creating' : 'Editing'}… step ${j.step} of ${j.steps} · ${mmss(el)} elapsed` + (done > 2 ? ` · about ${mmss(el / done * (total - done))} left` : '') : `Loading the model… ${mmss(el)}`;
         if (j.preview) { prev.src = '/img/' + j.preview + '?n=' + j.preview_n; prev.style.display = ''; }
         await new Promise(r => setTimeout(r, 1500)); continue;
       }
@@ -305,8 +344,8 @@
         const f = j.results[0];
         txt.textContent = `Done in ${mmss(Date.now() / 1000 - j.started)}.`;
         b.insertAdjacentHTML('beforeend', `<img src="/img/${f}">`);
-        acts.innerHTML = `<a href="/img/${f}" download="${f}"><button>Download</button></a> <button class="cmp">Compare with original</button>`;
-        acts.querySelector('.cmp').onclick = () => { showTab('cover'); showResult(j, 0); };
+        acts.innerHTML = `<a href="/img/${f}" download="${f}"><button>Download</button></a>` + (j.input ? ' <button class="cmp">Compare with original</button>' : '');
+        if (j.input) acts.querySelector('.cmp').onclick = () => { showTab('cover'); showResult(j, 0); };
       } else { txt.textContent = j.status === 'cancelled' ? 'Cancelled.' : (j.message || j.status); acts.remove(); }
       return;
     }
@@ -323,8 +362,8 @@
       wrap.className = 'msg assistant';
       if (m.thinking) wrap.insertAdjacentHTML('beforeend', `<details class="think"><summary>Thought process</summary><div>${esc(m.thinking)}</div></details>`);
       if (m.content) { const b = document.createElement('div'); b.className = 'bubble'; b.innerHTML = md(m.content); wrap.appendChild(b); }
-      if (m.content || m.thinking) wrap.insertAdjacentHTML('beforeend', `<div class="acts"><button data-a="c" title="Copy">${ico('copy')}</button>${last ? `<button data-a="g" title="Regenerate">${ico('refresh')}</button>` : ''}</div>`);
-      wrap.querySelector('.acts')?.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.a === 'c') { navigator.clipboard.writeText(m.content || ''); b.innerHTML = ico('check'); setTimeout(() => b.innerHTML = ico('copy'), 1200); } if (b.dataset.a === 'g') send(null, true); });
+      if (m.content || m.thinking) wrap.insertAdjacentHTML('beforeend', `<div class="acts"><button data-a="c" title="Copy">${ico('copy')}</button><button data-a="s" title="Read aloud">${ico('speaker')}</button>${last ? `<button data-a="g" title="Regenerate">${ico('refresh')}</button>` : ''}</div>`);
+      wrap.querySelector('.acts')?.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.a === 'c') { navigator.clipboard.writeText(m.content || ''); b.innerHTML = ico('check'); setTimeout(() => b.innerHTML = ico('copy'), 1200); } if (b.dataset.a === 's') speak(m.content || '', b); if (b.dataset.a === 'g') send(null, true); });
     } else if (m.role === 'tool') {
       wrap.className = 'msg assistant'; wrap.appendChild(toolCard(m.name, null, m.content, m.card, false));
     }
@@ -392,14 +431,56 @@
   el('send').onclick = () => { if (streaming) stop(); else send(); };
   async function stop() { if (cur.id) await fetch('/api/chat/stop?id=' + cur.id, { method: 'POST' }); }
 
+  // ---------- voice: dictation (Whisper on this Mac) and reading answers aloud (macOS voices)
+  let voiceList = null, audioEl = null, speakBtn = null;
+  async function fillVoices() {
+    const sel = el('s-voice'); if (!sel) return;
+    try { if (!voiceList) voiceList = (await J('/api/voice/voices')).items; } catch (e) { return; }
+    const mine = voiceList.filter(v => /^en/.test(v.lang)).concat(voiceList.filter(v => !/^en/.test(v.lang)));
+    sel.innerHTML = '<option value="">System default</option>' + mine.map(v => `<option value="${esc(v.name)}">${esc(v.name)} (${v.lang.replace('_', '-')})</option>`).join('');
+    sel.value = PF.voice || ''; if (sel._ddSync) sel._ddSync();
+  }
+  function stopSpeech() { if (audioEl) { audioEl.pause(); audioEl = null; } if (speakBtn) { speakBtn.innerHTML = ico('speaker'); speakBtn.classList.remove('on'); speakBtn = null; } }
+  async function speak(text, btn) {
+    const same = btn && btn === speakBtn; stopSpeech(); if (same) return;
+    speakBtn = btn || null; if (btn) { btn.innerHTML = ico('stop'); btn.classList.add('on'); }
+    try {
+      const r = await fetch('/api/voice/speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, voice: PF.voice || null }) });
+      if (!r.ok) throw new Error((await r.json()).error);
+      if (btn && speakBtn !== btn) return;
+      const a = new Audio(URL.createObjectURL(await r.blob())); audioEl = a; a.onended = stopSpeech; a.onerror = stopSpeech; await a.play();
+    } catch (e) { stopSpeech(); if (e.name !== 'NotAllowedError') UI.alert(e.message); }
+  }
+  let rec = null;
+  async function toggleMic() {
+    const mic = el('mic');
+    if (rec) { rec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) return UI.alert('This browser cannot record audio here. On an iPhone the secure address (https) is needed.');
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { return UI.alert('Microphone access was not allowed. Allow it in the browser address bar and try again.'); }
+    const chunks = [], mr = new MediaRecorder(stream), ext = /mp4/.test(mr.mimeType) ? 'm4a' : 'webm'; rec = mr;
+    mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    mr.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop()); rec = null; mic.classList.remove('rec'); mic.innerHTML = ico('mic');
+      if (!chunks.length) return; mic.disabled = true; mic.title = 'Transcribing…'; mic.classList.add('busy');
+      try {
+        const r = await fetch('/api/voice/transcribe?ext=' + ext, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: new Blob(chunks) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error);
+        const ta = el('input'); ta.value = (ta.value ? ta.value.replace(/\s*$/, ' ') : '') + j.text; ta.dispatchEvent(new Event('input')); ta.focus();
+      } catch (e) { UI.alert(e.message); }
+      mic.disabled = false; mic.classList.remove('busy'); mic.title = 'Dictate (speech to text on this Mac)';
+    };
+    mr.start(); mic.classList.add('rec'); mic.innerHTML = ico('stop'); mic.title = 'Stop recording';
+  }
+  el('mic').onclick = toggleMic;
+
   async function send(_e, regenerate = false) {
     stuck = true;
     if (streaming) return;
     const text = input.value.trim();
     if (!regenerate && !text && !attached && !files.length) return;
     if (macDown) { setBanner(bannerText, true); return; }
-    if (!cur.id) { const c = await post('/api/chat/new', { model: settings.model, incognito: !!cur.incognito }); cur.id = c.id; }
-    const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, personal: { name: PF.name, about: PF.about, style: PF.style, instr: PF.instr }, memory: PF.memory !== false, regenerate };
+    if (!cur.id) { const c = await post('/api/chat/new', { model: settings.model, incognito: !!cur.incognito, project: cur.project || '' }); cur.id = c.id; }
+    const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, personal: { name: PF.name, about: PF.about, style: PF.style, instr: PF.instr }, memory: PF.memory !== false, web: PF.web === true, regenerate };
     if (!regenerate) {
       body.content = text; if (attached) body.image = attached;
       if (files.length) body.files = files.map(f => ({ name: f.name, data: f.data }));
@@ -445,13 +526,13 @@
     } catch (e) { if (e.name !== 'AbortError') wrap.insertAdjacentHTML('beforeend', `<div class="err">Error: ${esc(e.message)}</div>`); }
     streaming = false; ctrl = null; el('send').innerHTML = ico('arrowup'); el('send').title = 'Send';
     try { cur = await J('/api/chat/get?id=' + cur.id); } catch (e) {}
-    render(); loadList(); setTimeout(loadList, 6000); setTimeout(async () => { await loadList(); const c = chats.find(x => x.id === cur.id); if (c) { cur.title = c.title; setTitle(); } }, 12000);
+    render(); if (PF.speak && content.trim()) speak(content, null); loadList(); setTimeout(loadList, 6000); setTimeout(async () => { await loadList(); const c = chats.find(x => x.id === cur.id); if (c) { cur.title = c.title; setTitle(); } }, 12000);
   }
 
   // ---------- library (your documents)
   let libTimer = null;
   async function loadLib() {
-    let r; try { r = await J('/api/library'); } catch (e) { return; }
+    let r; try { r = await J('/api/library?project=' + encodeURIComponent(PROJ.active)); } catch (e) { return; }
     const box = el('liblist'); box.innerHTML = '';
     if (!r.items.length) box.innerHTML = '<p class="hint">No documents yet.</p>';
     for (const d of r.items) {
@@ -462,7 +543,7 @@
       row.querySelector('small').textContent = `${fmtSize(d.size)} · ${d.note ? d.note + ' · ' : ''}${st}`;
       if (d.status === 'error') row.classList.add('bad');
       const b = row.querySelector('button'); b.innerHTML = ico('x');
-      b.onclick = async () => { if (await UI.confirm(`"${d.name}" will be removed from your library.`, { title: 'Remove document?', ok: 'Remove', danger: true })) { await J('/api/library?id=' + d.id, { method: 'DELETE' }); loadLib(); } };
+      b.onclick = async () => { if (await UI.confirm(`"${d.name}" will be removed from your library.`, { title: 'Remove document?', ok: 'Remove', danger: true })) { await J('/api/library?id=' + d.id + '&project=' + encodeURIComponent(PROJ.active), { method: 'DELETE' }); loadLib(); } };
       box.appendChild(row);
     }
     clearTimeout(libTimer); if (r.items.some(d => d.status === 'indexing')) libTimer = setTimeout(loadLib, 1500);
@@ -471,7 +552,7 @@
     for (const f of files) {
       if (f.size > 25 * 1024 * 1024) { UI.alert(f.name + ' is larger than 25 MB.', { title: 'File too large' }); continue; }
       const data = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(f); });
-      try { await post('/api/library', { name: f.name, data }); } catch (e) { UI.alert(e.message, { title: "Couldn't add " + f.name }); }
+      try { await post('/api/library', { name: f.name, data, project: PROJ.active }); } catch (e) { UI.alert(e.message, { title: "Couldn't add " + f.name }); }
       loadLib();
     }
   }
@@ -484,7 +565,7 @@
     const q = el('libq').value.trim(); if (!q) { el('libhits').innerHTML = ''; return; }
     el('libhits').innerHTML = '<p class="hint">Searching…</p>';
     try {
-      const r = await post('/api/library/search', { query: q });
+      const r = await post('/api/library/search', { query: q, project: PROJ.active });
       el('libhits').innerHTML = r.hits.length ? '' : '<p class="hint">No matching passages.</p>';
       for (const h of r.hits) { const d = document.createElement('div'); d.className = 'libhit'; d.innerHTML = '<b></b><p></p>'; d.querySelector('b').textContent = `${h.name} · passage ${h.passage} · ${Math.round(h.score * 100)}% match`; d.querySelector('p').textContent = h.text.slice(0, 420) + (h.text.length > 420 ? '…' : ''); el('libhits').appendChild(d); }
     } catch (e) { el('libhits').innerHTML = ''; UI.alert(e.message, { title: 'Search failed' }); }
@@ -538,7 +619,7 @@
   setInterval(() => fetch('/api/me').catch(() => {}), 60000); // keeps a guest session alive while the browser is open
 
   // ---------- boot
-  loadModels(); loadList(); render();
+  loadModels(); loadList(); render(); PROJ.load();
   const view = loadView();
   showTab(['chat', 'music', 'cover', 'console'].includes(view.tab) ? view.tab : 'chat');
   if (view.chat) openChat(view.chat).then(() => { if (view.tab && view.tab !== 'chat') showTab(view.tab); }).catch(() => {});
@@ -565,7 +646,7 @@
   function fill() {
     let t = 'auto'; try { t = localStorage.getItem('theme') || 'auto'; } catch (e) {}
     setSeg('s-theme', t); setSeg('s-size', PF.size); setSeg('p-style', PF.style);
-    el('s-enter').checked = PF.enter; el('s-tools').checked = settings.tools; el('s-think').value = settings.think;
+    el('s-enter').checked = PF.enter; el('s-web').checked = PF.web === true; el('s-speak').checked = PF.speak === true; fillVoices(); el('s-tools').checked = settings.tools; el('s-think').value = settings.think;
     el('s-model').innerHTML = el('model').innerHTML; el('s-model').value = settings.model;
     el('p-name').value = PF.name; el('p-about').value = PF.about; el('p-instr').value = PF.instr;
     document.dispatchEvent(new Event('ui-sync'));
@@ -583,17 +664,119 @@
     el('m-hint').textContent = items.length ? items.length + (items.length === 1 ? ' thing remembered.' : ' things remembered.') : 'Nothing remembered yet. It learns from your chats as you go, or tell it to remember something.';
     el('m-clear').hidden = !items.length;
   }
+  window.openSettings = open;
+  let pjEdit = null;
+  async function loadProjects() {
+    await PROJ.load(); el('pj-list').innerHTML = '';
+    for (const p of PROJ.list) {
+      const r = document.createElement('div'); r.className = 'memrow'; const t = document.createElement('span'); t.innerHTML = '<b></b> <small></small>'; t.firstChild.textContent = p.name; t.lastChild.textContent = (p.instructions || 'no instructions').slice(0, 90);
+      const e = document.createElement('button'); e.type = 'button'; e.title = 'Edit'; e.innerHTML = ico('pencil'); e.onclick = () => { pjEdit = p.id; el('pj-name').value = p.name; el('pj-instr').value = p.instructions; el('pj-save').textContent = 'Save changes'; el('pj-cancel').hidden = false; };
+      const d = document.createElement('button'); d.type = 'button'; d.title = 'Delete'; d.innerHTML = ico('x');
+      d.onclick = async () => { if (!await UI.confirm('The project and the documents in it are deleted. Its chats are kept and move out of the project.', { title: 'Delete "' + p.name + '"?', ok: 'Delete', danger: true })) return; await J('/api/projects?id=' + p.id, { method: 'DELETE' }); if (PROJ.active === p.id) PROJ.set(''); loadProjects(); };
+      r.append(t, e, d); el('pj-list').appendChild(r);
+    }
+    if (!PROJ.list.length) el('pj-list').innerHTML = '<p class="hint">No projects yet.</p>';
+  }
+  function pjReset() { pjEdit = null; el('pj-name').value = ''; el('pj-instr').value = ''; el('pj-save').textContent = 'Add project'; el('pj-cancel').hidden = true; }
+  el('pj-cancel').onclick = pjReset;
+  el('pj-save').onclick = async () => { try { const r = await post('/api/projects', { id: pjEdit, name: el('pj-name').value, instructions: el('pj-instr').value }); pjReset(); await loadProjects(); if (!PROJ.active) PROJ.set(r.project.id); } catch (e) { UI.alert(e.message); } };
+  async function loadKeys() {
+    el('api-url').textContent = location.origin + '/v1';
+    let d; try { d = await J('/api/keys'); } catch (e) { return; }
+    el('api-list').innerHTML = ''; el('api-add').disabled = el('api-name').disabled = !d.can;
+    if (!d.can) { el('api-list').innerHTML = '<p class="hint">Sign in with an account to make API keys.</p>'; return; }
+    for (const k of d.items) {
+      const r = document.createElement('div'); r.className = 'memrow'; const t = document.createElement('span'); t.innerHTML = '<b></b> <small></small>'; t.firstChild.textContent = k.name;
+      t.lastChild.textContent = k.prefix + '… · ' + (k.last_used ? 'used ' + new Date(k.last_used * 1000).toLocaleDateString() : 'never used');
+      const b = document.createElement('button'); b.type = 'button'; b.title = 'Revoke'; b.innerHTML = ico('x');
+      b.onclick = async () => { if (await UI.confirm('Programs using this key stop working immediately.', { title: 'Revoke "' + k.name + '"?', ok: 'Revoke', danger: true })) { await J('/api/keys?id=' + k.id, { method: 'DELETE' }); loadKeys(); } };
+      r.append(t, b); el('api-list').appendChild(r);
+    }
+    if (!d.items.length) el('api-list').innerHTML = '<p class="hint">No keys yet.</p>';
+  }
+  el('api-add').onclick = async () => { try { const r = await post('/api/keys', { name: el('api-name').value }); el('api-name').value = ''; await UI.alert(r.key, { title: 'Your new key. Copy it now, it is not shown again.' }); } catch (e) { UI.alert(e.message); } loadKeys(); };
+  const ddSync = (...ids) => ids.forEach(i => el(i)._ddSync && el(i)._ddSync());
+  let tkEdit = null, tkPoll = null;
+  const when = t => t.when.type === 'every' ? 'every ' + t.when.hours + ' h' : 'daily at ' + t.when.time;
+  function tkReset() { tkEdit = null; for (const i of ['tk-name', 'tk-prompt', 'tk-folder']) el(i).value = ''; el('tk-type').value = 'daily'; el('tk-time').value = '08:00'; el('tk-hours').value = 24; el('tk-save').textContent = 'Add task'; el('tk-cancel').hidden = true; tkType(); ddSync('tk-type', 'tk-model'); }
+  function tkType() { const ev = el('tk-type').value === 'every'; el('tk-time').hidden = ev; el('tk-hours').hidden = !ev; el('tk-hrs').hidden = !ev; }
+  async function loadTasks() {
+    let d; try { d = await J('/api/tasks'); } catch (e) { return; }
+    el('tk-model').innerHTML = [...el('model').options].map(o => `<option value="${esc(o.value)}">${esc(o.textContent)}</option>`).join('');
+    el('tk-list').innerHTML = '';
+    for (const t of d.items) {
+      const r = document.createElement('div'); r.className = 'memrow'; const sp = document.createElement('span'); sp.innerHTML = '<b></b> <small></small>'; sp.firstChild.textContent = t.name;
+      const run = d.running.includes(t.id);
+      sp.lastChild.textContent = when(t) + ' · ' + (run ? 'running now…' : t.last_run ? 'last ' + new Date(t.last_run * 1000).toLocaleString() + (t.last_status && t.last_status !== 'ok' ? ' (' + t.last_status + ')' : '') : 'not run yet') + (t.enabled ? '' : ' · paused');
+      const mk = (title, icon, fn) => { const b = document.createElement('button'); b.type = 'button'; b.title = title; b.innerHTML = ico(icon); b.onclick = fn; return b; };
+      r.append(sp,
+        mk(run ? 'Running' : 'Run now', 'refresh', async () => { if (run) return; try { await post('/api/tasks/run', { id: t.id }); } catch (e) { UI.alert(e.message); } loadTasks(); }),
+        mk(t.enabled ? 'Pause' : 'Resume', t.enabled ? 'stop' : 'arrowup', async () => { await post('/api/tasks', { ...t, ...t.when, enabled: !t.enabled }); loadTasks(); }),
+        mk('Edit', 'pencil', () => { tkEdit = t.id; el('tk-name').value = t.name; el('tk-prompt').value = t.prompt; el('tk-folder').value = t.folder; el('tk-type').value = t.when.type; el('tk-time').value = t.when.time; el('tk-hours').value = t.when.hours; el('tk-model').value = t.model; el('tk-save').textContent = 'Save changes'; el('tk-cancel').hidden = false; tkType(); ddSync('tk-type', 'tk-model'); }),
+        mk('Delete', 'x', async () => { if (await UI.confirm('The task is removed. Chats it already made stay.', { title: 'Delete "' + t.name + '"?', ok: 'Delete', danger: true })) { await J('/api/tasks?id=' + t.id, { method: 'DELETE' }); loadTasks(); } }));
+      el('tk-list').appendChild(r);
+    }
+    if (!d.items.length) el('tk-list').innerHTML = '<p class="hint">' + (d.can ? 'No tasks yet.' : 'Sign in with an account to schedule tasks.') + '</p>';
+    el('tk-save').disabled = !d.can;
+    clearTimeout(tkPoll); if (d.running.length && !el('setdlg').hidden) tkPoll = setTimeout(loadTasks, 4000);
+  }
+  el('tk-type').onchange = tkType; el('tk-cancel').onclick = tkReset;
+  el('tk-save').onclick = async () => { try { await post('/api/tasks', { id: tkEdit, name: el('tk-name').value, prompt: el('tk-prompt').value, type: el('tk-type').value, time: el('tk-time').value, hours: el('tk-hours').value, folder: el('tk-folder').value, model: el('tk-model').value }); tkReset(); loadTasks(); } catch (e) { UI.alert(e.message); } };
+  let mmBusy = false;
+  const gb = n => n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : Math.max(1, Math.round(n / 1e6)) + ' MB';
+  async function loadMM() {
+    let d; try { d = await J('/api/models/installed'); } catch (e) { el('mm-list').textContent = 'Could not reach Ollama.'; return; }
+    el('mm-list').innerHTML = '';
+    const have = new Set(d.items.map(m => m.name));
+    for (const m of d.items) {
+      const r = document.createElement('div'); r.className = 'memrow'; const t = document.createElement('span');
+      t.innerHTML = '<b></b> <small></small>'; t.firstChild.textContent = m.label === m.name ? m.name : m.label + ' (' + m.name + ')';
+      t.lastChild.textContent = gb(m.size) + (m.helper ? ' - used behind the scenes' : '');
+      r.appendChild(t);
+      if (d.can_manage) { const b = document.createElement('button'); b.type = 'button'; b.title = 'Remove this model'; b.innerHTML = ico('x');
+        b.onclick = async () => { if (!await UI.confirm('The files (' + gb(m.size) + ') are deleted from this Mac. You can download it again later.', { title: 'Remove ' + m.name + '?', ok: 'Remove', danger: true })) return; try { await J('/api/models?name=' + encodeURIComponent(m.name), { method: 'DELETE' }); } catch (e) { UI.alert(e.message); } loadMM(); loadModels(); };
+        r.appendChild(b); }
+      el('mm-list').appendChild(r);
+    }
+    el('mm-sug').innerHTML = '';
+    for (const sg of d.suggest.filter(x => !have.has(x.name))) { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = sg.name; b.title = sg.note; b.onclick = () => { el('mm-new').value = sg.name; }; el('mm-sug').appendChild(b); }
+    el('mm-go').disabled = !d.can_manage; el('mm-new').disabled = !d.can_manage;
+    if (!d.can_manage) el('mm-hint').textContent = 'Sign in with an account to download or remove models.';
+  }
+  async function pullModel() {
+    const name = el('mm-new').value.trim(); if (!name || mmBusy) return; mmBusy = true; el('mm-go').disabled = true;
+    el('mm-prog').hidden = false; el('mm-bar').style.width = '0%'; el('mm-txt').textContent = 'Starting...';
+    try {
+      const r = await fetch('/api/models/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      if (!r.ok) throw new Error((await r.json()).error);
+      const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '', err = '';
+      for (;;) { const { value, done } = await rd.read(); if (done) break; buf += dec.decode(value, { stream: true });
+        let i; while ((i = buf.indexOf('\n\n')) >= 0) { const ev = JSON.parse(buf.slice(6, i)); buf = buf.slice(i + 2);
+          if (ev.error) err = ev.error; else { if (ev.total) el('mm-bar').style.width = Math.round(100 * ev.completed / ev.total) + '%'; el('mm-txt').textContent = (ev.total ? Math.round(100 * (ev.completed || 0) / ev.total) + '% ' : '') + ev.status; } } }
+      if (err) throw new Error(err);
+      el('mm-new').value = ''; el('mm-txt').textContent = 'Done.';
+    } catch (e) { el('mm-txt').textContent = /fetch|network|dial|lookup/i.test(e.message) ? 'No internet connection. ' + e.message : e.message; }
+    mmBusy = false; el('mm-go').disabled = false; loadMM(); loadModels();
+  }
   function show(sec) {
+    if (sec === 'models') loadMM();
+    if (sec === 'tasks') loadTasks();
+    if (sec === 'api') loadKeys();
+    if (sec === 'projects') loadProjects();
     if (sec === 'memory') { el('m-on').checked = PF.memory !== false; loadMem(); } dlg.querySelectorAll('.setnav button').forEach(b => b.classList.toggle('on', b.dataset.s === sec)); dlg.querySelectorAll('.setpane section').forEach(s => { s.hidden = s.dataset.s !== sec; }); }
   el('setnav').onclick = e => { const b = e.target.closest('button'); if (b) show(b.dataset.s); };
   el('setx').innerHTML = window.ico ? ico('x') : '&times;'; el('setx').onclick = () => dlg.close();
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
   el('gear').onclick = () => open('general');
+  el('s-web').onchange = async () => { if (el('s-web').checked && !await UI.confirm('Searches and the pages the model opens will leave this Mac and go to the internet. Everything else stays local.', { title: 'Allow web access?', ok: 'Allow' })) { el('s-web').checked = false; return; } PF.web = el('s-web').checked; savePrefs(); };
+  el('s-speak').onchange = () => { PF.speak = el('s-speak').checked; savePrefs(); if (!PF.speak) stopSpeech(); };
+  el('s-voice').onchange = () => { PF.voice = el('s-voice').value; savePrefs(); };
   el('s-enter').onchange = () => { PF.enter = el('s-enter').checked; savePrefs(); };
   el('s-tools').onchange = () => { settings.tools = el('s-tools').checked; el('tools').checked = settings.tools; saveSettings(); };
   el('s-think').onchange = () => { settings.think = el('s-think').value; el('think').value = settings.think; saveSettings(); el('think').dispatchEvent(new Event('change')); };
   el('s-model').onchange = () => { settings.model = el('s-model').value; el('model').value = settings.model; saveSettings(); el('model').dispatchEvent(new Event('change')); };
   for (const [id, k] of [['p-name', 'name'], ['p-about', 'about'], ['p-instr', 'instr']]) el(id).oninput = () => { PF[k] = el(id).value; savePrefs(); };
+  el('mm-go').onclick = pullModel; el('mm-new').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); pullModel(); } };
   el('m-on').onchange = () => { PF.memory = el('m-on').checked; savePrefs(); };
   const addMem = async () => { const t = el('m-new').value.trim(); if (!t) return; el('m-new').value = ''; loadMem((await post('/api/memory', { text: t })).items); };
   el('m-add').onclick = addMem; el('m-new').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addMem(); } };
