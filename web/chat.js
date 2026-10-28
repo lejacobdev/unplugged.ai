@@ -199,7 +199,13 @@
   toBottom.innerHTML = ico('arrowdown');
   const gap = () => msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight;
   const syncArrow = () => { toBottom.hidden = gap() < 120; };
-  msgsEl.addEventListener('scroll', () => { stuck = gap() < 60; syncArrow(); }, { passive: true });
+  // Any user scroll gesture releases the lock at once (a small flick up used to be undone by the next streamed token); reaching the bottom again re-locks.
+  const release = () => { stuck = false; };
+  msgsEl.addEventListener('wheel', e => { if (e.deltaY < 0) release(); }, { passive: true });
+  msgsEl.addEventListener('touchmove', release, { passive: true });
+  msgsEl.addEventListener('pointerdown', e => { if (e.target === msgsEl) release(); });   // dragging the scrollbar
+  document.addEventListener('keydown', e => { if (['PageUp', 'ArrowUp', 'Home'].includes(e.key) && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) release(); });
+  msgsEl.addEventListener('scroll', () => { if (gap() < 24) stuck = true; syncArrow(); }, { passive: true });
   const scrollDown = force => { if (force) stuck = true; if (stuck) msgsEl.scrollTop = msgsEl.scrollHeight; syncArrow(); };
   toBottom.onclick = () => { stuck = true; msgsEl.scrollTo({ top: msgsEl.scrollHeight, behavior: 'smooth' }); };
   new ResizeObserver(syncArrow).observe(el('inner'));
