@@ -19,7 +19,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone as an app. Nothing
 
 | | |
 |---|---|
-| **Chat** | A ChatGPT-style interface on your own models: **stereo 2** (stronger reasoning, `gpt-oss:20b`) and **mono 2** (quicker and simpler, `qwen3:14b`). Reasoning effort switch, tool calling, markdown, code blocks, chat history, incognito chats. |
+| **Chat** | A chatbot interface on our own fine-tuned models: **stereo 2** (stronger reasoning, based on `gpt-oss:20b`) and **mono 2** (quicker and simpler, based on `qwen3:14b`). |
 | **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Piano roll, in-browser preview, MIDI download. |
 | **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
 | **Console** | A live log of everything the models are doing. |
