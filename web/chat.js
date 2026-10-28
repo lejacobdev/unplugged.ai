@@ -190,7 +190,7 @@
   el('newchat').onclick = () => newChat(false);
   el('incog').onclick = () => newChat(!(cur && cur.incognito));
   function leaveIncognito() { if (cur && cur.incognito) fetch('/api/chat/end-incognito', { method: 'POST' }).catch(() => {}); }
-  const setTitle = () => { el('ttl').innerHTML = (cur.incognito ? ico('incognito') + ' ' : '') + esc(cur.title || 'New chat'); el('tab-chat').classList.toggle('incognito', !!cur.incognito); el('incog').classList.toggle('on', !!cur.incognito); el('incog').setAttribute('aria-pressed', !!cur.incognito); };
+  const setTitle = () => { el('ttl').innerHTML = (cur.incognito ? ico('incognito') + ' ' : '') + esc(cur.title || 'New chat'); el('tab-chat').classList.toggle('incognito', !!cur.incognito); el('incog').classList.toggle('on', !!cur.incognito); el('incog').setAttribute('aria-pressed', !!cur.incognito); el('incog').innerHTML = ico(cur.incognito ? 'eye' : 'incognito'); el('incog').title = cur.incognito ? 'Leave incognito: start a normal chat' : 'Incognito chat: not saved, gone when you leave it'; };
 
   // ---------- rendering
   // Follow the stream only while the reader is at the bottom; scrolling up stops it, and the arrow button brings them back.
