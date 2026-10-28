@@ -40,7 +40,7 @@ TOOLS = [
         "name": "generate_music",
         "description": "Generate one new original piano + electric guitar piece (MIDI). It runs in the background and shows up in the chat as a player after 30-90 seconds.",
         "parameters": {"type": "object", "properties": {
-            "length": {"type": "string", "enum": ["short", "medium", "long"], "description": "about 30s / 45s / 70s"},
+            "length": {"type": "string", "enum": ["short", "medium", "long"], "description": "about 20s / 35s / 45s"},
             "creativity": {"type": "string", "enum": ["safe", "balanced", "wild"]},
             "style": {"type": "string", "description": "Artist and/or song the user wants it to sound like, e.g. 'Pink Floyd' or 'Dire Straits - Sultans of Swing'. Pass the user's words. Leave out when no style was asked for."},
             "continue_from": {"type": "string", "description": "Optional sample id (from list_music) to continue from"}},
@@ -317,7 +317,7 @@ def plan_music(model, prompt):
     try:
         body = {"model": model, "stream": False, "think": _think_param(model, "off"), "format": PLAN_SCHEMA, "options": {"temperature": 0.2, "num_predict": 700},
                 "messages": [{"role": "system", "content": "You turn a music request into settings. style: only the artist and/or song to sound like, copied from the request in the user's words, or an empty string if none was named. "
-                              "length: short (about 30 seconds), medium (about 45 seconds) or long (about 70 seconds); medium unless the user asks for short/long. "
+                              "length: short (about 20 seconds), medium (about 35 seconds) or long (about 45 seconds); medium unless the user asks for short/long. "
                               "creativity: safe if they want something familiar or traditional, wild if they want experimental or surprising, otherwise balanced. "
                               "count: how many pieces (1 to 4), 1 unless they ask for more. Reply with JSON only."},
                              {"role": "user", "content": prompt}]}

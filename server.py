@@ -141,7 +141,7 @@ def run_job(job_id, p):
                     y = model.generate(
                         torch.tensor([start]), do_sample=True, temperature=float(p["temp"]),
                         top_p=float(p["top_p"]), repetition_penalty=rep,
-                        max_new_tokens=int(p["tokens"]), pad_token_id=tok["PAD_None"], eos_token_id=tok["EOS_None"],
+                        max_new_tokens=max(50, min(int(p["tokens"]), 1023 - len(start))), pad_token_id=tok["PAD_None"], eos_token_id=tok["EOS_None"],
                     )
                 ids = [t for t in y[0].tolist() if t not in SPECIAL]
                 try:
@@ -223,7 +223,7 @@ def find_style_reference(style):
 
 def start_music(owner, ephemeral, style="", length="medium", creativity="balanced", count=1, cont=None):
     """Starts a background generation job. Returns (job id, reference or None)."""
-    tokens = {"short": 700, "medium": 1000, "long": 1500}.get(length, 1000)
+    tokens = {"short": 500, "medium": 800, "long": 1000}.get(length, 800)
     temp, rep = {"safe": (0.9, 1.15), "balanced": (0.95, 1.12), "wild": (1.1, 1.12)}.get(creativity, (0.95, 1.12))
     try:
         if cont:
@@ -539,7 +539,7 @@ class Handler(BaseHTTPRequestHandler):
             defaults = {"count": 1, "tokens": 1000, "temp": 0.95, "top_p": 0.95, "rep": 1.12, "need_both": True, "prompt_tokens": 64}
             p = {**defaults, **p}
             p["count"] = max(1, min(int(p["count"]), 6))
-            p["tokens"] = max(200, min(int(p["tokens"]), 1900))
+            p["tokens"] = max(200, min(int(p["tokens"]), 1000))
             if p.get("continue_id"):
                 resolve(p["continue_id"], o)
         except Exception as e:
