@@ -414,3 +414,40 @@ progress, .bar > i, .progress > i { transition: width .4s ease; }
 .mpdl a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 10px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 13px; transition: background-color .15s; }
 .mpdl a:hover { background: var(--hover); }
 .mp .i { width: 16px; height: 16px; }
+
+/* music prompt */
+#mprompt { width: 100%; min-height: 84px; resize: vertical; background: var(--bg); border: 1px solid var(--line); color: var(--ink); padding: 12px 14px; font: inherit; line-height: 1.45; margin: 6px 0 12px; }
+.adv { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.adv summary { cursor: pointer; color: var(--muted); font-size: 13.5px; padding: 6px 0; list-style: none; display: flex; align-items: center; gap: 8px; }
+.adv summary::-webkit-details-marker { display: none; }
+.adv summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .18s var(--ease); }
+.adv[open] summary::before { transform: rotate(45deg); }
+.adv[open] > :not(summary) { animation: fadeup .25s var(--ease) both; }
+
+/* attached files */
+.attach { display: flex; flex-wrap: wrap; gap: 8px; }
+.achip { display: inline-flex; align-items: center; gap: 8px; max-width: 260px; padding: 7px 10px; border-radius: 12px; background: var(--bubble); border: 1px solid var(--line); font-size: 13px; animation: fadeup .2s var(--ease) both; }
+.achip .i { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.achip .an { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.achip .as { color: var(--muted); font-size: 12px; flex: none; }
+.achip button { background: transparent; border: 0; padding: 2px; margin: 0 -4px 0 0; display: inline-flex; color: var(--muted); border-radius: 50%; }
+.achip button:hover { color: var(--ink); background: var(--hover); }
+.achip.img { padding: 4px; position: relative; } .achip.img img { height: 54px; border-radius: 9px; display: block; }
+.achip.img button { position: absolute; top: -6px; right: -6px; background: var(--bubble); border: 1px solid var(--line); }
+.mfiles { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.msg.user .mfiles .achip { background: var(--bubble); }
+
+/* slimmer message bar (about 52px tall, like ChatGPT) */
+.composer .box { padding: 8px; gap: 0; border-radius: 26px; }
+.composer .attach:empty { display: none; }
+.composer .attach { padding: 2px 4px 8px; }
+.composer .row { align-items: center; }
+.composer textarea { padding: 6px 4px; min-height: 0; line-height: 24px; }
+.roundbtn, .composer .send { width: 36px; height: 36px; }
+@media (max-width: 860px) { .roundbtn, .composer .send { width: 36px; height: 36px; } .composer .box { border-radius: 26px; } }
+
+/* gray helper text under each model in the picker */
+.dd-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dd-text small { color: var(--muted); font-size: 12.5px; line-height: 1.35; font-weight: 400; white-space: normal; }
+.dd-menu:has(small) { min-width: 280px; }
+.dd-item:has(small) { align-items: flex-start; padding: 10px; }

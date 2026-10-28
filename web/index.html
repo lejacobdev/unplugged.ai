@@ -148,7 +148,7 @@
   <div class="msgs" id="msgs"><div class="inner" id="inner"></div></div>
   <div class="composer"><div class="box">
     <div class="attach" id="attach"></div>
-    <div class="row"><button id="attbtn" class="roundbtn" title="Attach a picture to edit"><i data-i="plus"></i></button><input type="file" id="attfile" accept="image/*" hidden>
+    <div class="row"><button id="attbtn" class="roundbtn" title="Attach files or pictures"><i data-i="plus"></i></button><input type="file" id="attfile" multiple hidden>
       <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
       <button class="send" id="send" title="Send"><i data-i="arrowup"></i></button></div>
   </div><div class="disclaimer">Runs fully offline on your Mac. Answers can be wrong.</div></div>
@@ -156,7 +156,12 @@
 
 <main id="tab-music" style="display:none">
   <section class="card">
-    <h2>Generate</h2>
+    <h2>Make music</h2>
+    <label for="mprompt">Describe what you want</label>
+    <textarea id="mprompt" rows="3" placeholder="A slow, dreamy piece with clean electric guitar, in the style of Pink Floyd"></textarea>
+    <label>Model <select id="mmodel"></select></label>
+    <button class="primary" id="mcreate">Create</button>
+    <details class="adv"><summary>Advanced settings</summary>
     <label>How many <span class="v" id="v_count">2</span>
       <input type="range" id="count" min="1" max="6" value="2"></label>
     <label>Length <span class="v" id="v_tokens">~45 s</span>
@@ -170,11 +175,12 @@
       <input type="range" id="pt" min="16" max="300" step="8" value="64"></label>
     <label>Seed (optional, repeatable) <input type="number" id="seed" placeholder="random"></label>
     <div class="check"><input type="checkbox" id="both" checked><label for="both" style="margin:0">Require both piano and guitar</label></div>
-    <button class="primary" id="go">Generate</button>
+    <button id="go" style="width:100%;margin-top:4px">Generate with these settings</button>
     <button id="reset" style="width:100%;margin-top:8px;font-size:13px">Reset to recommended settings</button>
+    </details>
     <div class="bar" id="bar"><i></i></div>
     <div class="status" id="status"></div>
-    <p class="hint">Each sample takes roughly 20–60 seconds on this Mac. Everything stays on your computer.</p>
+    <p class="hint">Each piece takes roughly 20–60 seconds on this Mac. Name an artist or song and it starts from the opening of a real piece by them in the local library, then writes new music. Everything stays on your computer.</p>
   </section>
 
   <div class="right">
@@ -533,6 +539,30 @@ $('go').onclick = async () => {
   } catch (e) { $('status').textContent = 'Error: ' + e.message; $('go').disabled = false; $('bar').style.display = 'none'; }
 };
 
+
+// ---- describe-it music prompt (the chosen model reads the request, then the music model writes it)
+async function loadMusicModels() {
+  try {
+    const st = await api('/api/chat/status'), sel = $('mmodel'), saved = (LS.get('chat-settings') || {}).model;
+    sel.innerHTML = st.models.map(m => `<option value="${m.name}" data-desc="${(m.desc || '').replace(/"/g, '&quot;')}">${m.label || m.name}</option>`).join('');
+    const mm = LS.get('music-model'); sel.value = [mm, saved].find(v => v && st.models.some(m => m.name === v)) || (st.models[0] || {}).name || '';
+    sel.dispatchEvent(new Event('change'));
+  } catch (e) {}
+}
+$('mmodel').onchange = () => LS.set('music-model', $('mmodel').value);
+$('mcreate').onclick = async () => {
+  const text = $('mprompt').value.trim();
+  if (!text) { $('status').textContent = 'Describe the music first.'; $('mprompt').focus(); return; }
+  $('mcreate').disabled = $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = 'Reading your request…';
+  try {
+    const r = await api('/api/music/prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: text, model: $('mmodel').value }) });
+    const p = r.plan; $('status').textContent = `${p.count > 1 ? p.count + ' pieces' : '1 piece'}, ${p.length}, ${p.creativity}` + (r.reference ? ` · starting from ${r.reference.artist} in the library` : p.style ? ` · nothing by "${p.style}" in the library, writing a general piece` : '');
+    setJob('music', r.job); await followMusic(r.job);
+  } catch (e) { $('status').textContent = 'Error: ' + e.message; $('bar').style.display = 'none'; }
+  $('mcreate').disabled = false; $('go').disabled = false;
+};
+$('mprompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('mcreate').click(); });
+loadMusicModels();
 
 // ---- picture editor
 let srcData = null, imgReady = false, cur = null, curIdx = 0;

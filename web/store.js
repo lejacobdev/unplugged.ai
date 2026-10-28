@@ -17,6 +17,7 @@ window.Store = (() => {
 // Icons (Lucide-style line icons). Use ico('name') in strings or <i data-i="name"></i> in markup. No emojis anywhere in the UI.
 window.ICONS = {
   menu: '<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>',
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   incognito: '<path d="M10.73 5.08a10.74 10.74 0 0 1 11.2 6.57 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-1.44 2.49"/><path d="M14.08 14.16a3 3 0 0 1-4.24-4.24"/><path d="M17.48 17.5a10.75 10.75 0 0 1-15.42-5.15 1 1 0 0 1 0-.7 10.75 10.75 0 0 1 4.45-5.14"/><path d="m2 2 20 20"/>',

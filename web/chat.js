@@ -98,7 +98,7 @@
   }
 
   // ---------- state
-  let chats = [], cur = { id: null, messages: [], title: 'New chat' }, streaming = false, ctrl = null, attached = null;
+  let chats = [], cur = { id: null, messages: [], title: 'New chat' }, streaming = false, ctrl = null, attached = null, files = [];
   const S = Store.get('chat-settings') || {};
   const settings = { model: S.model || 'gpt-oss:20b', think: S.think || 'low', tools: S.tools !== false, system: S.system || '' };
   const saveSettings = () => Store.set('chat-settings', settings);
@@ -130,7 +130,7 @@
       setBanner(s.ok ? (s.training ? 'A heavy job (picture editing or training) is running on this Mac. The language model shares its memory, so chatting now will be slow and will slow that job down. For fast chat, wait until it finishes.' : '') : 'Ollama is not running, so there is no language model to chat with. Open the Ollama app (or run "ollama serve") and reload. The Music and Album cover tabs still work.');
       el('stat').innerHTML = (ME.kind === 'guest' ? 'Guest session · ' : 'Signed in · ') + `<span class="dotstat ${s.ok ? 'ok' : 'bad'}" title="${s.ok ? 'Language model connected' : 'Language model offline'}"></span>`;
       modelLabels = Object.fromEntries(s.models.map(m => [m.name, m.label || m.name]));
-      const opts = s.models.map(m => `<option value="${m.name}">${m.label || m.name}</option>`).join('');
+      const opts = s.models.map(m => `<option value="${m.name}" data-desc="${esc(m.desc || '')}">${m.label || m.name}</option>`).join('');
       if (el('model').innerHTML !== opts) el('model').innerHTML = opts;
       if (!s.models.find(m => m.name === settings.model) && s.models.length) settings.model = s.models[0].name;
       el('model').value = settings.model; syncModelBtn();
@@ -313,7 +313,8 @@
       wrap.className = 'msg user';
       if (m.images) wrap.innerHTML = m.images.map(f => `<img class="userimg" src="/img/${f}">`).join('');
       else if (m._local) wrap.innerHTML = `<img class="userimg" src="${m._local}">`;
-      const b = document.createElement('div'); b.className = 'bubble'; b.textContent = m.content; wrap.appendChild(b);
+      if (m.files && m.files.length) { const fr = document.createElement('div'); fr.className = 'mfiles'; fr.innerHTML = m.files.map(f => `<span class="achip">${ico('file')}<span class="an">${esc(f.name)}</span><span class="as">${fmtSize(f.size)}</span></span>`).join(''); wrap.appendChild(fr); }
+      if (!/^\((picture|file) attached\)$/.test(m.content) || !(m.files && m.files.length) && !m.images && !m._local) { const b = document.createElement('div'); b.className = 'bubble'; b.textContent = m.content; wrap.appendChild(b); }
     } else if (m.role === 'assistant') {
       wrap.className = 'msg assistant';
       if (m.thinking) wrap.insertAdjacentHTML('beforeend', `<details class="think"><summary>Thought process</summary><div>${esc(m.thinking)}</div></details>`);
@@ -345,15 +346,31 @@
   document.addEventListener('click', e => { if (e.target.classList.contains('cp')) { navigator.clipboard.writeText(e.target.parentElement.querySelector('code').textContent); e.target.textContent = 'Copied'; setTimeout(() => e.target.textContent = 'Copy', 1200); } });
 
   // ---------- attach
-  function renderAttach() { el('attach').innerHTML = attached ? `<img src="${attached}"><button id="unattach" style="padding:2px 8px;font-size:12px">Remove</button>` : ''; if (attached) el('unattach').onclick = () => { attached = null; renderAttach(); }; }
+  const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+  function renderAttach() {
+    const box = el('attach'); box.innerHTML = '';
+    if (attached) { const d = document.createElement('div'); d.className = 'achip img'; d.innerHTML = `<img src="${attached}"><button type="button" aria-label="Remove picture">${ico('x')}</button>`; d.querySelector('button').onclick = () => { attached = null; renderAttach(); }; box.appendChild(d); }
+    files.forEach((f, i) => { const d = document.createElement('div'); d.className = 'achip'; d.innerHTML = `${ico('file')}<span class="an">${esc(f.name)}</span><span class="as">${fmtSize(f.size)}</span><button type="button" aria-label="Remove file">${ico('x')}</button>`; d.querySelector('button').onclick = () => { files.splice(i, 1); renderAttach(); }; box.appendChild(d); });
+  }
   el('attbtn').onclick = () => el('attfile').click();
-  function attachFile(f) { if (!f || !f.type.startsWith('image/')) return; const r = new FileReader(); r.onload = () => { attached = r.result; renderAttach(); el('input').focus(); }; r.readAsDataURL(f); }
+  // pictures go to the picture editor flow; every other file is read by the language model
+  function attachFile(f) {
+    if (!f) return;
+    if (f.size > 25 * 1024 * 1024) { alert(f.name + ' is larger than 25 MB.'); return; }
+    const r = new FileReader();
+    r.onload = () => {
+      if (f.type.startsWith('image/') && !attached) attached = r.result;
+      else if (files.length < 6) files.push({ name: f.name, size: f.size, data: r.result });
+      renderAttach(); el('input').focus();
+    };
+    r.readAsDataURL(f);
+  }
   const chatTab = el('tab-chat');
   ['dragenter', 'dragover'].forEach(ev => chatTab.addEventListener(ev, e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); chatTab.classList.add('dropping'); } }));
   ['dragleave', 'drop'].forEach(ev => chatTab.addEventListener(ev, e => { if (ev === 'dragleave' && chatTab.contains(e.relatedTarget)) return; e.preventDefault(); chatTab.classList.remove('dropping'); }));
-  chatTab.addEventListener('drop', e => attachFile([...e.dataTransfer.files].find(f => f.type.startsWith('image/'))));
-  el('input').addEventListener('paste', e => { const f = [...(e.clipboardData?.files || [])].find(x => x.type.startsWith('image/')); if (f) { e.preventDefault(); attachFile(f); } });
-  el('attfile').onchange = e => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = () => { attached = r.result; renderAttach(); }; r.readAsDataURL(f); e.target.value = ''; };
+  chatTab.addEventListener('drop', e => [...e.dataTransfer.files].forEach(attachFile));
+  el('input').addEventListener('paste', e => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); fs.forEach(attachFile); } });
+  el('attfile').onchange = e => { [...e.target.files].forEach(attachFile); e.target.value = ''; };
 
   // ---------- sending
   const input = el('input');
@@ -365,14 +382,15 @@
   async function send(_e, regenerate = false) {
     if (streaming) return;
     const text = input.value.trim();
-    if (!regenerate && !text && !attached) return;
+    if (!regenerate && !text && !attached && !files.length) return;
     if (macDown) { setBanner(bannerText, true); return; }
     if (!cur.id) { const c = await post('/api/chat/new', { model: settings.model, incognito: !!cur.incognito }); cur.id = c.id; }
     const body = { id: cur.id, model: settings.model, think: settings.think, tools: settings.tools, system: settings.system, regenerate };
     if (!regenerate) {
       body.content = text; if (attached) body.image = attached;
-      cur.messages.push({ role: 'user', content: text || '(picture attached)', _local: attached });
-      input.value = ''; input.style.height = 'auto'; attached = null; renderAttach();
+      if (files.length) body.files = files.map(f => ({ name: f.name, data: f.data }));
+      cur.messages.push({ role: 'user', content: text || (attached ? '(picture attached)' : '(file attached)'), _local: attached, files: files.map(f => ({ name: f.name, size: f.size })) });
+      input.value = ''; input.style.height = 'auto'; attached = null; files = []; renderAttach();
     } else { while (cur.messages.length && cur.messages[cur.messages.length - 1].role !== 'user') cur.messages.pop(); }
     streaming = true; el('send').innerHTML = ico('stop'); el('send').title = 'Stop'; render();
     const inner = el('inner');

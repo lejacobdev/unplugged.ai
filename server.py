@@ -6,6 +6,7 @@ Everything runs on this Mac; the server only listens on localhost.
 """
 import json
 import os
+import random
 import re
 import socket
 import ssl
@@ -115,7 +116,11 @@ def run_job(job_id, p):
     job = jobs[job_id]
     try:
         start = [tok["BOS_None"]]
-        if p.get("continue_id"):
+        if p.get("prompt_path"):
+            seq = tok(Score(str(p["prompt_path"])))
+            seq = seq[0] if isinstance(seq, list) else seq
+            start += list(seq.ids)[: int(p["prompt_tokens"])]
+        elif p.get("continue_id"):
             seq = tok(Score(str(resolve(p["continue_id"], p["owner"]))))
             seq = seq[0] if isinstance(seq, list) else seq
             start += list(seq.ids)[: int(p["prompt_tokens"])]
@@ -170,22 +175,83 @@ def run_job(job_id, p):
 
 
 # ---------- chat tools (the LLM can call these)
-def tool_generate_music(args, chat_obj, owner):
-    tokens = {"short": 700, "medium": 1000, "long": 1500}.get(args.get("length", "medium"), 1000)
-    temp, rep = {"safe": (0.9, 1.15), "balanced": (0.95, 1.12), "wild": (1.1, 1.12)}.get(args.get("creativity", "balanced"), (0.95, 1.12))
-    cont = args.get("continue_from") or None
+# ---------- "in the style of ...": seed a new piece with the opening of a real piece by that artist from the local training library
+_style_index = None
+
+
+def _norm(t):
+    return re.sub(r"[^a-z0-9 ]+", "", re.sub(r"\s+", " ", t.lower().replace("&", " and ").replace("-", " "))).strip()
+
+
+def _build_style_index():
+    global _style_index
+    idx = []
+    for group in ("base_lakh", "mine_style", "mine_core"):
+        d = ROOT / "data/clean" / group
+        if d.exists():
+            for f in d.glob("*__*__*.mid"):
+                artist, title, _ = f.stem.split("__", 2) if f.stem.count("__") >= 2 else (f.stem, "", "")
+                idx.append((_norm(artist), _norm(title), artist, title, f))
+    _style_index = idx
+
+
+_FILLER = set("in the style of like a an some something song piece music tune track sounding that sounds similar to by from with and for me make create write compose give please".split())
+
+
+def find_style_reference(style):
+    """Returns (path, artist, title) of a library piece matching the requested artist/song, or None.
+    The artist (or song) name must make up at least half of what was asked, so unknown names are not matched by accident."""
+    if not style:
+        return None
+    if _style_index is None:
+        _build_style_index()
+    words = [w for w in _norm(style).split() if w not in _FILLER]
+    if not words:
+        return None
+    q = " " + " ".join(words) + " "
+    def covers(name):
+        n = name.split()
+        return len(name) >= 3 and " " + name + " " in q and len(n) / len(words) >= 0.5
+    by_title = [e for e in _style_index if len(e[1]) >= 4 and " " + e[1] + " " in q and (not e[0] or " " + e[0] + " " in q)]
+    by_artist = [e for e in _style_index if covers(e[0])]
+    hit = by_title or by_artist
+    if not hit:
+        return None
+    e = random.choice(hit)
+    return e[4], e[2], e[3]
+
+
+def start_music(owner, ephemeral, style="", length="medium", creativity="balanced", count=1, cont=None):
+    """Starts a background generation job. Returns (job id, reference or None)."""
+    tokens = {"short": 700, "medium": 1000, "long": 1500}.get(length, 1000)
+    temp, rep = {"safe": (0.9, 1.15), "balanced": (0.95, 1.12), "wild": (1.1, 1.12)}.get(creativity, (0.95, 1.12))
     try:
         if cont:
             resolve(cont, owner)
     except Exception:
         cont = None
-    p = {"owner": owner, "ephemeral": bool(chat_obj.get("incognito")), "count": 1, "tokens": tokens, "temp": temp, "top_p": 0.95, "rep": rep, "need_both": True, "prompt_tokens": 64, "continue_id": cont}
+    style = (style or "").strip()
+    ref = find_style_reference(style) if style and not cont else None
+    count = max(1, min(int(count or 1), 4))
+    p = {"owner": owner, "ephemeral": bool(ephemeral), "count": count, "tokens": tokens, "temp": temp, "top_p": 0.95, "rep": rep, "need_both": True,
+         "prompt_tokens": 96 if ref else 64, "continue_id": cont, "prompt_path": str(ref[0]) if ref else None}
     jid = uuid.uuid4().hex[:8]
-    jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "Starting the music model…", "results": [], "count": 1, "started": time.time()}
-    # runs in the background: the chat shows a live card with the finished player, and the model can keep talking
+    jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "Starting the music model…", "results": [], "count": count, "started": time.time()}
     threading.Thread(target=run_job, args=(jid, p), daemon=True).start()
-    return ("Started composing one new piece. It appears in this chat as a player with a piano roll when it is ready (about 30 to 90 seconds). "
-            "Tell the user briefly that it is being made. Do not describe the music yet, you have not heard it."), {"kind": "music_job", "job": jid}
+    return jid, ref
+
+
+def tool_generate_music(args, chat_obj, owner):
+    style = (args.get("style") or "").strip()
+    jid, ref = start_music(owner, chat_obj.get("incognito"), style, args.get("length", "medium"), args.get("creativity", "balanced"), 1, args.get("continue_from") or None)
+    if ref:
+        how = f"It is seeded with the opening of a real piece by {ref[1]} from the local library ({ref[2]}) and then continues as new music. Say it is inspired by {ref[1]}, not a copy."
+    elif style:
+        how = f"There is nothing by '{style}' in the local music library, so this is a general piano + guitar piece, not in that style. Tell the user this honestly."
+    else:
+        how = ""
+    return ("Started composing one new piece. It appears in this chat as a player with a piano roll when it is ready (about 30 to 90 seconds). " + how +
+            " Tell the user briefly that it is being made. Do not describe the music yet, you have not heard it."), {"kind": "music_job", "job": jid}
 
 
 def tool_edit_picture(args, chat_obj, owner):
@@ -455,6 +521,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if path.startswith("/api/chat/"):
             return self.chat_post(path)
+        if path == "/api/music/prompt":
+            try:
+                b = self.body_json()
+                text = (b.get("prompt") or "").strip()
+                if not text:
+                    return self.send(400, {"error": "Describe the music you want first."})
+                plan = chat.plan_music(b.get("model") or "gpt-oss:20b", text)
+                jid, ref = start_music(o, False, plan["style"], plan["length"], plan["creativity"], plan["count"])
+                return self.send(200, {"job": jid, "plan": plan, "reference": {"artist": ref[1], "title": ref[2]} if ref else None})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
         if path != "/api/generate":
             return self.send(404, {"error": "not found"})
         try:

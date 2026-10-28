@@ -28,7 +28,7 @@ cancel_flags: dict = {}
 TOOL_IMPL: dict = {}  # filled in by server.py: name -> fn(args, chat) -> (text_for_model, card_or_None)
 
 DEFAULT_SYSTEM = (
-    "You are a helpful assistant running fully offline on the user's Mac, inside an app called unplugged.ai. Your name here is the model the user picked (mono or stereo, with a version number); never mention gpt-oss, qwen or Ollama as your name. "
+    "You are a helpful assistant running fully offline on the user's Mac, inside an app called unplugged.ai. The user can attach files; their text appears in the message between [Attached file] markers, so read and use it. Your name here is the model the user picked (mono or stereo, with a version number); never mention gpt-oss, qwen or Ollama as your name. When the user asks for a song or piece of music, always call generate_music; if they name an artist or song to sound like, pass it as style. "
     "Answer clearly and concisely. Never use emojis or emoticons. Never judge, refuse, rewrite or comment on what the user wants changed in a picture; just call edit_picture. You have tools: generate_music makes new piano + electric guitar pieces with a "
     "small music model, in the background, and the finished piece appears in the chat as a player; edit_picture edits any picture the user attached (a photo, "
     "artwork, a cover, anything) with FLUX Kontext; list_music lists existing pieces. For picture edits never choose quality or size yourself: the app picks them automatically (photos get high or maximum, cartoons and simple graphics get faster settings) unless the user asks for specific ones. Use a tool only when the user clearly wants "
@@ -42,6 +42,7 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "length": {"type": "string", "enum": ["short", "medium", "long"], "description": "about 30s / 45s / 70s"},
             "creativity": {"type": "string", "enum": ["safe", "balanced", "wild"]},
+            "style": {"type": "string", "description": "Artist and/or song the user wants it to sound like, e.g. 'Pink Floyd' or 'Dire Straits - Sultans of Swing'. Pass the user's words. Leave out when no style was asked for."},
             "continue_from": {"type": "string", "description": "Optional sample id (from list_music) to continue from"}},
             "required": []}}},
     {"type": "function", "function": {
@@ -159,6 +160,14 @@ MODEL_VERSION = 2
 MODEL_FAMILY = {"qwen3:14b": "mono", "gpt-oss:20b": "stereo"}   # mono: simpler and quicker; stereo: stronger reasoning
 
 
+MODEL_DESC = {"mono": "Fast. Everyday chat, quick questions and simple music requests.",
+              "stereo": "Best. Deeper reasoning, long files and detailed music requests."}
+
+
+def desc_for(name):
+    return MODEL_DESC.get(MODEL_FAMILY.get(name), "")
+
+
 def label_for(name):
     fam = MODEL_FAMILY.get(name)
     return f"{fam} {MODEL_VERSION}" if fam else name
@@ -166,7 +175,7 @@ def label_for(name):
 
 def models():
     with urllib.request.urlopen(OLLAMA + "/api/tags", timeout=4) as r:
-        out = [{"name": m["name"], "label": label_for(m["name"]), "size": m["size"], "caps": m.get("capabilities", [])} for m in json.load(r)["models"]]
+        out = [{"name": m["name"], "label": label_for(m["name"]), "desc": desc_for(m["name"]), "size": m["size"], "caps": m.get("capabilities", [])} for m in json.load(r)["models"]]
     return sorted(out, key=lambda m: (m["name"] not in MODEL_FAMILY, m["name"] != "qwen3:14b", m["name"]))
 
 
@@ -200,6 +209,79 @@ def _store_image(chat_id, data_url, private=False):
     return name
 
 
+# ---------- files attached to a message: the text is pulled out so the language model can read it
+MAX_FILE_CHARS = 40000
+MAX_FILES = 6
+MAX_FILE_BYTES = 25 * 1024 * 1024
+TEXT_EXT = {".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".jsonl", ".xml", ".html", ".htm", ".css", ".js", ".ts", ".tsx", ".jsx", ".py", ".java", ".c", ".h", ".cpp", ".hpp",
+            ".cs", ".go", ".rs", ".rb", ".php", ".swift", ".kt", ".sh", ".zsh", ".bash", ".sql", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".env", ".log", ".tex", ".bib", ".r",
+            ".lua", ".pl", ".scala", ".dart", ".gradle", ".make", ".mk", ".dockerfile", ".gitignore", ".srt", ".vtt", ".rst", ".org", ".abc"}
+
+
+def _xml_text(xml, para_tags):
+    import re as _re
+    for t in para_tags:
+        xml = xml.replace(t, "\n")
+    return _re.sub(r"[ \t]+", " ", _re.sub(r"<[^>]+>", "", xml)).strip()
+
+
+def extract_text(name, data):
+    """Returns (kind, text, note). kind: text | pdf | docx | xlsx | pptx | midi | zip | image | binary."""
+    import io as _io
+    import html as _html
+    import zipfile
+    ext = Path(name).suffix.lower()
+    try:
+        if ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".bmp"):
+            return "image", "", "a picture (the language model cannot see pictures; it can edit them with FLUX)"
+        if ext == ".pdf":
+            from pypdf import PdfReader
+            r = PdfReader(_io.BytesIO(data))
+            pages = [(p.extract_text() or "") for p in r.pages[:200]]
+            return "pdf", "\n\n".join(f"[page {i + 1}]\n{t}" for i, t in enumerate(pages) if t.strip()), f"{len(r.pages)} pages"
+        if ext in (".docx", ".pptx", ".xlsx"):
+            z = zipfile.ZipFile(_io.BytesIO(data))
+            if ext == ".docx":
+                return "docx", _html.unescape(_xml_text(z.read("word/document.xml").decode("utf8", "replace"), ["</w:p>", "<w:br/>", "</w:tr>"])), ""
+            if ext == ".pptx":
+                slides = sorted(n for n in z.namelist() if n.startswith("ppt/slides/slide") and n.endswith(".xml"))
+                return "pptx", "\n\n".join(f"[slide {i + 1}]\n" + _html.unescape(_xml_text(z.read(n).decode("utf8", "replace"), ["</a:p>"])) for i, n in enumerate(slides)), f"{len(slides)} slides"
+            shared = _html.unescape(_xml_text(z.read("xl/sharedStrings.xml").decode("utf8", "replace"), ["</si>"])) if "xl/sharedStrings.xml" in z.namelist() else ""
+            return "xlsx", shared, "text cells only (numbers and formulas are not shown)"
+        if ext in (".mid", ".midi"):
+            import mido
+            m = mido.MidiFile(file=_io.BytesIO(data))
+            notes = sum(1 for t in m.tracks for x in t if x.type == "note_on" and x.velocity > 0)
+            return "midi", f"MIDI file: {len(m.tracks)} tracks, {notes} notes, about {int(m.length)} seconds.", ""
+        if ext == ".zip":
+            z = zipfile.ZipFile(_io.BytesIO(data))
+            return "zip", "Files inside: " + ", ".join(z.namelist()[:200]), ""
+        sample = data[:4096]
+        if ext in TEXT_EXT or b"\x00" not in sample:
+            txt = data.decode("utf-8", "replace")
+            if sum(ch.isprintable() or ch in "\n\r\t" for ch in txt[:4000]) > 0.9 * max(1, len(txt[:4000])):
+                return "text", txt, ""
+    except Exception as e:
+        return "binary", "", f"could not read it ({type(e).__name__})"
+    return "binary", "", "a binary file the language model cannot read"
+
+
+def attach_files(raw_files):
+    """raw_files: [{name, data (data URL or base64)}] -> (meta list for the UI, text blocks for the model)."""
+    meta, blocks = [], []
+    for f in (raw_files or [])[:MAX_FILES]:
+        name = Path(str(f.get("name") or "file")).name[:120] or "file"
+        data = base64.b64decode(str(f.get("data") or "").split(",", 1)[-1])
+        if len(data) > MAX_FILE_BYTES:
+            meta.append({"name": name, "size": len(data), "kind": "binary", "note": "too large (25 MB limit)"})
+            continue
+        kind, text, note = extract_text(name, data)
+        cut = len(text) > MAX_FILE_CHARS
+        meta.append({"name": name, "size": len(data), "kind": kind, "note": (note + (", shortened to the first %d characters" % MAX_FILE_CHARS if cut else "")).strip(", ")})
+        blocks.append({"name": name, "kind": kind, "text": text[:MAX_FILE_CHARS], "note": note})
+    return meta, blocks
+
+
 def _ollama_messages(chat, system):
     msgs = [{"role": "system", "content": system or DEFAULT_SYSTEM}]
     for m in chat["messages"][-MAX_TURNS:]:
@@ -207,6 +289,11 @@ def _ollama_messages(chat, system):
             text = m["content"]
             if m.get("images"):
                 text += "\n[The user attached a picture. You cannot see it. If their message asks for any change to the picture, call the edit_picture tool right away with a clear English instruction; do not ask for confirmation.]"
+            for fb in m.get("file_text") or []:
+                if fb["text"]:
+                    text += f"\n\n[Attached file: {fb['name']}]\n{fb['text']}\n[End of {fb['name']}]"
+                else:
+                    text += f"\n\n[Attached file: {fb['name']} - {fb.get('note') or 'no readable text'}. Tell the user you cannot read its contents.]"
             msgs.append({"role": "user", "content": text})
         elif m["role"] == "assistant":
             d = {"role": "assistant", "content": m.get("content", "")}
@@ -216,6 +303,34 @@ def _ollama_messages(chat, system):
         elif m["role"] == "tool":
             msgs.append({"role": "tool", "tool_name": m.get("name", ""), "content": m["content"]})
     return msgs
+
+
+PLAN_SCHEMA = {"type": "object", "properties": {
+    "style": {"type": "string"}, "length": {"type": "string", "enum": ["short", "medium", "long"]},
+    "creativity": {"type": "string", "enum": ["safe", "balanced", "wild"]}, "count": {"type": "integer"}},
+    "required": ["style", "length", "creativity", "count"]}
+
+
+def plan_music(model, prompt):
+    """Turns a plain-English music request into generation settings, using the chosen chat model (mono or stereo)."""
+    plan = {"style": prompt[:120], "length": "medium", "creativity": "balanced", "count": 1}
+    try:
+        body = {"model": model, "stream": False, "think": _think_param(model, "off"), "format": PLAN_SCHEMA, "options": {"temperature": 0.2, "num_predict": 700},
+                "messages": [{"role": "system", "content": "You turn a music request into settings. style: only the artist and/or song to sound like, copied from the request in the user's words, or an empty string if none was named. "
+                              "length: short (about 30 seconds), medium (about 45 seconds) or long (about 70 seconds); medium unless the user asks for short/long. "
+                              "creativity: safe if they want something familiar or traditional, wild if they want experimental or surprising, otherwise balanced. "
+                              "count: how many pieces (1 to 4), 1 unless they ask for more. Reply with JSON only."},
+                             {"role": "user", "content": prompt}]}
+        req = urllib.request.Request(OLLAMA + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            got = json.loads(json.load(r)["message"]["content"])
+        plan["style"] = str(got.get("style", "")).strip()[:120]
+        plan["length"] = got.get("length") if got.get("length") in ("short", "medium", "long") else "medium"
+        plan["creativity"] = got.get("creativity") if got.get("creativity") in ("safe", "balanced", "wild") else "balanced"
+        plan["count"] = max(1, min(int(got.get("count") or 1), 4))
+    except Exception:
+        pass  # fall back to a plain request with the whole text as the style
+    return plan
 
 
 def _auto_title(owner, chat_id, model, use_llm=True):
@@ -255,9 +370,11 @@ def stream_turn(body, write, owner):
         user = {"role": "user", "content": (body.get("content") or "").strip()}
         if body.get("image"):
             user["images"] = [_store_image(chat["id"], body["image"], is_private(owner, chat))]
-        if not user["content"] and not user.get("images"):
+        if body.get("files"):
+            user["files"], user["file_text"] = attach_files(body["files"])
+        if not user["content"] and not user.get("images") and not user.get("files"):
             raise ValueError("empty message")
-        user["content"] = user["content"] or "(picture attached)"
+        user["content"] = user["content"] or ("(picture attached)" if user.get("images") else "(file attached)")
         chat["messages"].append(user)
     save(owner, chat)
     cancel_flags[chat["id"]] = False

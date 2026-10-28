@@ -26,7 +26,8 @@
       const menu = document.createElement('div'); menu.className = 'dd-menu'; menu.setAttribute('role', 'listbox');
       [...sel.options].forEach((o, i) => {
         const it = document.createElement('div'); it.className = 'dd-item' + (i === sel.selectedIndex ? ' sel' : ''); it.setAttribute('role', 'option'); it.dataset.i = i;
-        it.innerHTML = '<span>' + o.textContent.replace(/</g, '&lt;') + '</span>' + (i === sel.selectedIndex ? tick : '');
+        const desc = o.dataset.desc ? '<small>' + o.dataset.desc.replace(/</g, '&lt;') + '</small>' : '';
+        it.innerHTML = '<span class="dd-text"><span>' + o.textContent.replace(/</g, '&lt;') + '</span>' + desc + '</span>' + (i === sel.selectedIndex ? tick : '');
         it.onclick = () => { sel.selectedIndex = i; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); sync(); closeMenu(); btn.focus(); };
         menu.appendChild(it);
       });
