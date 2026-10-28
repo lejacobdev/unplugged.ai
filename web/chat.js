@@ -107,24 +107,29 @@
 
   // ---------- models + status
   let modelLabels = {}, macDown = false, bannerText = '', bannerGone = '';
-  // Banner can be closed with the x or by swiping it up; it stays closed until the message changes or goes away.
+  // Warnings show as a small toast in the bottom right corner and slide out to the right by themselves after BANNER_MS. They can also be closed with the x or by swiping them right; a closed one stays closed until the message changes.
+  const BANNER_MS = 9000; let bannerTimer = null;
   function setBanner(text, force) {
     const b = el('banner');
-    if (!text) { bannerGone = ''; bannerText = ''; b.style.display = 'none'; return; }
-    if (text !== bannerText) { bannerText = text; b.innerHTML = '<span class="btxt"></span><button class="bclose" type="button" aria-label="Dismiss">' + (window.ico ? ico('x') : '&times;') + '</button>'; b.querySelector('.btxt').textContent = text; b.style.transform = ''; b.style.opacity = ''; }
-    b.style.display = (bannerGone === text && !force) ? 'none' : 'flex';
+    if (!text) { bannerGone = ''; bannerText = ''; b.style.display = 'none'; clearTimeout(bannerTimer); return; }
+    const changed = text !== bannerText, wasHidden = b.style.display !== 'flex';
+    if (changed) { bannerText = text; b.innerHTML = '<span class="btxt"></span><button class="bclose" type="button" aria-label="Dismiss">' + (window.ico ? ico('x') : '&times;') + '</button>'; b.querySelector('.btxt').textContent = text; b.style.transform = ''; b.style.opacity = ''; }
+    const show = !(bannerGone === text && !force);
+    b.style.display = show ? 'flex' : 'none';
+    if (show && (changed || wasHidden || force)) { clearTimeout(bannerTimer); bannerTimer = setTimeout(dismissBanner, BANNER_MS); }
   }
-  function dismissBanner() {
-    const b = el('banner'); bannerGone = bannerText;
-    b.style.transition = 'transform .2s, opacity .2s'; b.style.transform = 'translateY(-120%)'; b.style.opacity = '0';
-    setTimeout(() => { b.style.display = 'none'; b.style.transition = ''; b.style.transform = ''; b.style.opacity = ''; }, 200);
+  function dismissBanner() {   // slides out to the right, like a swipe, then hides
+    const b = el('banner'); bannerGone = bannerText; clearTimeout(bannerTimer);
+    b.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1), opacity .35s ease'; b.style.transform = 'translateX(calc(100% + 40px))'; b.style.opacity = '0';
+    setTimeout(() => { b.style.display = 'none'; b.style.transition = ''; b.style.transform = ''; b.style.opacity = ''; }, 360);
   }
-  (() => {
-    const b = el('banner'); let y0 = null, dy = 0;
+  (() => {   // drag it sideways (finger or mouse); past 60px it flies off, otherwise it springs back
+    const b = el('banner'); let x0 = null, dx = 0;
     b.addEventListener('click', e => { if (e.target.closest('.bclose')) dismissBanner(); });
-    b.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; dy = 0; b.style.transition = 'none'; }, { passive: true });
-    b.addEventListener('touchmove', e => { if (y0 === null) return; dy = Math.min(0, e.touches[0].clientY - y0); b.style.transform = `translateY(${dy}px)`; b.style.opacity = String(1 + dy / 120); }, { passive: true });
-    b.addEventListener('touchend', () => { if (y0 === null) return; y0 = null; if (dy < -40) dismissBanner(); else { b.style.transition = 'transform .15s, opacity .15s'; b.style.transform = ''; b.style.opacity = ''; } });
+    b.addEventListener('pointerdown', e => { if (e.target.closest('.bclose')) return; x0 = e.clientX; dx = 0; b.setPointerCapture(e.pointerId); b.style.transition = 'none'; clearTimeout(bannerTimer); });
+    b.addEventListener('pointermove', e => { if (x0 === null) return; dx = Math.max(0, e.clientX - x0); b.style.transform = `translateX(${dx}px)`; b.style.opacity = String(Math.max(.2, 1 - dx / 220)); });
+    const end = () => { if (x0 === null) return; x0 = null; if (dx > 60) dismissBanner(); else { b.style.transition = 'transform .2s, opacity .2s'; b.style.transform = ''; b.style.opacity = ''; bannerTimer = setTimeout(dismissBanner, BANNER_MS); } };
+    b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end);
   })();
   async function loadModels() {
     try {
