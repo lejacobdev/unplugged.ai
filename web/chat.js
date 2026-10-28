@@ -111,18 +111,22 @@
   const BANNER_MS = 9000; let bannerTimer = null;
   function setBanner(text, force) {
     const b = el('banner');
-    if (!text) { bannerGone = ''; bannerText = ''; b.style.display = 'none'; clearTimeout(bannerTimer); return; }
+    if (!text) {   // the condition went away: slide out instead of snapping shut
+      const was = bannerText; bannerGone = ''; bannerText = ''; clearTimeout(bannerTimer);
+      if (was && b.style.display === 'flex') slideOut(b); else b.style.display = 'none';
+      return;
+    }
     const changed = text !== bannerText, wasHidden = b.style.display !== 'flex';
     if (changed) { bannerText = text; b.innerHTML = '<span class="btxt"></span><button class="bclose" type="button" aria-label="Dismiss">' + (window.ico ? ico('x') : '&times;') + '</button>'; b.querySelector('.btxt').textContent = text; b.style.transform = ''; b.style.opacity = ''; }
     const show = !(bannerGone === text && !force);
     b.style.display = show ? 'flex' : 'none';
     if (show && (changed || wasHidden || force)) { clearTimeout(bannerTimer); bannerTimer = setTimeout(dismissBanner, BANNER_MS); }
   }
-  function dismissBanner() {   // slides out to the right, like a swipe, then hides
-    const b = el('banner'); bannerGone = bannerText; clearTimeout(bannerTimer);
+  function slideOut(b) {
     b.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1), opacity .35s ease'; b.style.transform = 'translateX(calc(100% + 40px))'; b.style.opacity = '0';
-    setTimeout(() => { b.style.display = 'none'; b.style.transition = ''; b.style.transform = ''; b.style.opacity = ''; }, 360);
+    clearTimeout(b._hide); b._hide = setTimeout(() => { if (b.style.opacity === '0') b.style.display = 'none'; b.style.transition = ''; b.style.transform = ''; b.style.opacity = ''; }, 360);
   }
+  function dismissBanner() { bannerGone = bannerText; clearTimeout(bannerTimer); slideOut(el('banner')); }
   (() => {   // drag it sideways (finger or mouse); past 60px it flies off, otherwise it springs back
     const b = el('banner'); let x0 = null, dx = 0;
     b.addEventListener('click', e => { if (e.target.closest('.bclose')) dismissBanner(); });
