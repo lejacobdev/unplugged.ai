@@ -1,0 +1,25 @@
+# private / large / generated: never commit
+.venv/
+.venv-img/
+users/
+certs/
+chats/
+loras/
+image_edits/
+models/
+ckpt/
+data/
+logs/
+out/
+out_v1_light_finetune/
+dashboard_samples/
+ALL_DONE
+__pycache__/
+*.pem
+*.key
+*.safetensors
+*.pt
+*.mid
+*.png
+!web/icons/*.png
+!docs/img/*.png

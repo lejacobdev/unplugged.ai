@@ -1,0 +1,6 @@
+# picture editing side (Python 3.12, venv: .venv-img). Apple Silicon only (MLX).
+mflux==0.24.0
+mlx==0.32.4
+huggingface_hub[cli]
+pillow==13.0.0
+numpy

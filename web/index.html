@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#141416">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="unplugged.ai">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="icon" href="/icons/favicon.png">
+<title>unplugged.ai</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f9f9f9; --card: #f7f7f8; --ink: #0d0d0d; --muted: #6e6e80; --line: #e5e5e5; --hover: #ececec; --bubble: #f4f4f4; --composer: #f4f4f4;
+    --piano: #2f6fdb; --guitar: #d9622b; --accent: #0d0d0d; --accent-ink: #ffffff; --roll: #fbfaf8; --grid: #ececec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #212121; --panel: #171717; --card: #2a2a2a; --ink: #ececec; --muted: #9b9b9b; --line: #343434; --hover: #2a2a2a; --bubble: #303030; --composer: #303030;
+      --piano: #6fa3ff; --guitar: #ff935c; --accent: #ececec; --accent-ink: #212121; --roll: #1a1a1a; --grid: #2c2c2c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #212121; --panel: #171717; --card: #2a2a2a; --ink: #ececec; --muted: #9b9b9b; --line: #343434; --hover: #2a2a2a; --bubble: #303030; --composer: #303030;
+    --piano: #6fa3ff; --guitar: #ff935c; --accent: #ececec; --accent-ink: #212121; --roll: #1a1a1a; --grid: #2c2c2c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { padding: 20px 24px 8px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  header small { color: var(--muted); }
+  main { display: grid; grid-template-columns: 300px 1fr; gap: 16px; padding: 12px 24px 32px; max-width: 1280px; margin: 0 auto; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px 32px; } header { padding: 16px; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  label { display: block; font-size: 13px; margin-top: 12px; }
+  label span.v { float: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=number], select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+  .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; width: 100%; margin-top: 16px; padding: 11px; }
+  .status { font-size: 13px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; margin-top: 8px; overflow: hidden; display: none; }
+  .bar i { display: block; height: 100%; width: 40%; background: var(--accent); animation: slide 1.2s infinite ease-in-out; }
+  @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+  .right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .transport { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .title { font-weight: 600; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend { display: flex; gap: 14px; font-size: 13px; }
+  .legend label { margin: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  canvas { width: 100%; height: 280px; border-radius: 8px; background: var(--roll); border: 1px solid var(--line); display: block; cursor: pointer; }
+  .empty { height: 280px; display: grid; place-items: center; color: var(--muted); text-align: center; border: 1px dashed var(--line); border-radius: 8px; }
+  .dl { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .dl a { font-size: 13px; color: var(--ink); text-decoration: none; border: 1px solid var(--line); padding: 5px 10px; border-radius: 8px; }
+  .dl a:hover { border-color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 8px; }
+  td { padding: 8px; border-top: 1px solid var(--line); }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: var(--bg); }
+  tr.row.sel td { background: var(--bg); font-weight: 600; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+  td.act { text-align: right; white-space: nowrap; }
+  td.act button { padding: 3px 8px; font-size: 12px; }
+  .i { width: 1.1em; height: 1.1em; vertical-align: -0.18em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  .tabs { display: flex; gap: 4px; margin-left: 12px; }
+  .tabs button { border: none; background: none; color: var(--muted); padding: 6px 12px; border-radius: 8px; font-weight: 500; }
+  .tabs button.on { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; resize: vertical; }
+  .drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); cursor: pointer; font-size: 14px; }
+  .drop.over { border-color: var(--ink); color: var(--ink); }
+  .srcwrap { margin-top: 10px; } .srcwrap button { margin-top: 6px; font-size: 12px; padding: 4px 10px; }
+  #srcprev { width: 100%; max-height: 200px; object-fit: contain; border-radius: 8px; margin-top: 10px; display: none; background: var(--roll); }
+  .notice { border: 1px solid var(--guitar); border-radius: 10px; padding: 12px 14px; font-size: 13px; margin-bottom: 14px; line-height: 1.5; }
+  .notice code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+  .pbar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 10px; overflow: hidden; display: none; }
+  .pbar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .5s; }
+  .cmp { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: var(--roll); user-select: none; line-height: 0; }
+  .cmp img { width: 100%; display: block; }
+  .cmp img.after { position: absolute; inset: 0; height: 100%; object-fit: cover; }
+  .cmp .line { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 4px rgba(0,0,0,.6); pointer-events: none; }
+  .cmp input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+  .cmp .lab { position: absolute; top: 8px; font-size: 11px; line-height: 1; background: rgba(0,0,0,.55); color: #fff; padding: 4px 7px; border-radius: 6px; pointer-events: none; }
+  .vars { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .vars img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; }
+  .vars img.on { border-color: var(--ink); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+  .grid .it { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .grid .it img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .grid .it p { margin: 4px 0 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+</style>
+<link rel="stylesheet" href="/static/app.css">
+<script>/*ME*/</script>
+<script src="/static/store.js"></script>
+<script src="/static/ui.js"></script>
+</head>
+<body>
+<button class="menu" id="menu" title="Menu"><i data-i="menu"></i></button>
+<button class="menu-new" id="mnew" title="New chat"><i data-i="compose"></i></button>
+<div class="app">
+<aside class="side" id="side">
+  <div class="brand"><img class="logo" src="/icons/icon-192.png" alt="" width="24" height="24"> unplugged.ai</div>
+  <div class="newrow"><button class="newchat" id="newchat"><i data-i="compose"></i> New chat</button><button class="incog" id="incog" title="Incognito chat: not saved, gone when you leave it"><i data-i="incognito"></i></button></div>
+  <nav class="nav">
+    <button data-tab="chat" class="on"><i data-i="message"></i> Chat</button>
+    <button data-tab="music"><i data-i="music"></i> Music</button>
+    <button data-tab="cover"><i data-i="image"></i> Pictures</button>
+    <button data-tab="console"><i data-i="terminal"></i> Console</button>
+  </nav>
+  <div class="hist" id="hist"></div>
+  <div class="sidefoot">
+    <button class="acct" id="acct" title="Account"><span class="av" id="av"></span><span class="who"><b id="whoname"></b><small id="stat"></small></span></button>
+    <button id="theme" title="Toggle light/dark"><i data-i="theme"></i></button>
+    <div class="acctmenu" id="acctmenu" hidden>
+    <div class="am-h" id="amh"></div>
+    <div class="am-lan" id="amlan" hidden></div>
+    <button id="am-pw">Change password</button>
+    <button id="am-out"></button>
+  </div>
+  </div>
+</aside>
+<div class="content">
+<section id="tab-chat">
+  <div class="chead">
+    <div class="modelwrap">
+      <button class="modelbtn" id="modelbtn" aria-haspopup="true"><span id="modelname">stereo 2</span><i data-i="chevron"></i></button>
+      <div class="modelmenu" id="modelmenu" hidden>
+        <div class="mm-label">Model</div>
+        <select id="model" title="Language model"></select>
+        <div class="mm-label">Reasoning</div>
+        <div class="seg" id="thinkseg"></div>
+        <select id="think" hidden>
+          <option value="off">Off</option><option value="low">Low</option>
+          <option value="medium">Medium</option><option value="high">High</option></select>
+        <label class="mm-row" title="Let the model make music and edit pictures for you"><span>Tools (music and pictures)</span><input type="checkbox" id="tools" class="switch"></label>
+        <button class="mm-row" id="sysbtn" type="button"><span>System prompt</span><i data-i="settings"></i></button>
+      </div>
+    </div>
+    <span class="ttl" id="ttl">New chat</span>
+  </div>
+  <div class="banner" id="banner"></div>
+  <div class="msgs" id="msgs"><div class="inner" id="inner"></div></div>
+  <div class="composer"><div class="box">
+    <div class="attach" id="attach"></div>
+    <div class="row"><button id="attbtn" class="roundbtn" title="Attach a picture to edit"><i data-i="plus"></i></button><input type="file" id="attfile" accept="image/*" hidden>
+      <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
+      <button class="send" id="send" title="Send"><i data-i="arrowup"></i></button></div>
+  </div><div class="disclaimer">Runs fully offline on your Mac. Answers can be wrong.</div></div>
+</section>
+
+<main id="tab-music" style="display:none">
+  <section class="card">
+    <h2>Generate</h2>
+    <label>How many <span class="v" id="v_count">2</span>
+      <input type="range" id="count" min="1" max="6" value="2"></label>
+    <label>Length <span class="v" id="v_tokens">~45 s</span>
+      <input type="range" id="tokens" min="800" max="1900" step="100" value="1000"></label>
+    <label>Creativity <span class="v" id="v_temp">0.95</span>
+      <input type="range" id="temp" min="0.85" max="1.3" step="0.05" value="0.95"></label>
+    <label>Variety (avoid repetition) <span class="v" id="v_rep">1.12</span>
+      <input type="range" id="rep" min="1.05" max="1.3" step="0.01" value="1.12"></label>
+    <label>Start from <select id="cont"><option value="">Nothing (brand new)</option></select></label>
+    <label id="plabel" style="display:none">Keep the first <span class="v" id="v_pt">64</span> tokens
+      <input type="range" id="pt" min="16" max="300" step="8" value="64"></label>
+    <label>Seed (optional, repeatable) <input type="number" id="seed" placeholder="random"></label>
+    <div class="check"><input type="checkbox" id="both" checked><label for="both" style="margin:0">Require both piano and guitar</label></div>
+    <button class="primary" id="go">Generate</button>
+    <button id="reset" style="width:100%;margin-top:8px;font-size:13px">Reset to recommended settings</button>
+    <div class="bar" id="bar"><i></i></div>
+    <div class="status" id="status"></div>
+    <p class="hint">Each sample takes roughly 20–60 seconds on this Mac. Everything stays on your computer.</p>
+  </section>
+
+  <div class="right">
+    <section class="card">
+      <h2>Player</h2>
+      <div class="transport">
+        <button id="play" disabled><i data-i="play"></i> Play</button>
+        <button id="stop" disabled><i data-i="stop"></i> Stop</button>
+        <span class="title" id="ptitle">Select a sample below</span>
+        <div class="legend">
+          <label><input type="checkbox" id="m_piano" checked><span class="dot" style="background:var(--piano)"></span>Piano</label>
+          <label><input type="checkbox" id="m_guitar" checked><span class="dot" style="background:var(--guitar)"></span>Guitar</label>
+        </div>
+      </div>
+      <div class="empty" id="empty">Generate a sample or pick one from the library.<br>The notes will show here as a piano roll.</div>
+      <canvas id="roll" style="display:none"></canvas>
+      <div class="dl" id="dl"></div>
+      <p class="hint">Playback uses simple built-in sounds just to preview. For the real thing, download the MIDI and load it into GarageBand or Logic with a piano and a guitar sound.</p>
+    </section>
+
+    <section class="card">
+      <h2>Library</h2>
+      <table><thead><tr><th>Name</th><th>Length</th><th>Piano</th><th>Guitar</th><th></th><th></th></tr></thead>
+      <tbody id="lib"></tbody></table>
+    </section>
+  </div>
+</main>
+
+
+<main id="tab-console" style="display:none">
+  <section class="card conwrap">
+    <h2>Console <span class="hint" style="font-weight:400">what the AI is doing right now</span></h2>
+    <div class="contools">
+      <label class="tg"><input type="checkbox" class="cf" value="img" checked> Pictures</label>
+      <label class="tg"><input type="checkbox" class="cf" value="music" checked> Music</label>
+      <label class="tg"><input type="checkbox" class="cf" value="chat" checked> Chat</label>
+      <label class="tg"><input type="checkbox" class="cf" value="system" checked> System</label>
+      <span style="flex:1"></span>
+      <label class="tg"><input type="checkbox" id="conauto" checked> Auto-scroll</label>
+      <button id="concopy">Copy</button><button id="conclear">Clear</button>
+    </div>
+    <div class="console tall" id="conbig"></div>
+  </section>
+</main>
+
+<main id="tab-cover" style="display:none">
+  <section class="card">
+    <h2>Edit a picture</h2>
+    <div class="notice" id="isetup" style="display:none">
+      <b>One-time setup needed.</b> The image model (FLUX.1 Kontext [dev], about 34 GB) isn't installed yet.<br>
+      1. Open <code>huggingface.co/black-forest-labs/FLUX.1-Kontext-dev</code>, sign in and accept the license (it is a non-commercial license, so check it covers how you plan to use the cover).<br>
+      2. Run <code>./setup_image_model.sh</code> in the project folder. It logs in, downloads the model once, and saves an 8-bit copy for offline use.<br>
+      After that, editing works with no internet at all.
+    </div>
+    <div class="drop" id="drop">Drop a picture here, or click to choose<input type="file" id="file" accept="image/*" hidden></div>
+    <div class="srcwrap" id="srcwrap" style="display:none"><img id="srcprev" alt=""><button type="button" id="srcdel" title="Remove this picture"><i data-i="x"></i> Remove picture</button></div>
+    <label>What should change?
+      <textarea id="iprompt" rows="4" placeholder="Make the dog wear a red knitted hat"></textarea></label>
+    <div class="check"><input type="checkbox" id="livepv" checked><label for="livepv" style="margin:0">Live preview of the picture while it works (slightly slower)</label></div>
+    <div class="check"><input type="checkbox" id="preserve" checked><label for="preserve" style="margin:0">Keep everything else exactly the same</label></div>
+    <label>Quality <select id="iquality">
+      <option value="standard">Standard (28 steps)</option>
+      <option value="high" selected>High (40 steps)</option>
+      <option value="maximum">Maximum (60 steps, slowest)</option></select></label>
+    <label>Picture size (long side) <select id="isize">
+      <option value="768">768 px (faster)</option>
+      <option value="1024" selected>1024 px (what the model is best at)</option>
+      <option value="1280">1280 px</option></select></label>
+    <div class="lorabox">
+      <div style="display:flex;align-items:center;gap:8px"><b style="flex:1;font-size:13px">LoRAs (optional)</b>
+        <button type="button" id="lorabtn">Upload .safetensors</button><input type="file" id="lorafile" accept=".safetensors" hidden></div>
+      <div class="hint" id="loranone">None yet. Upload a FLUX LoRA; it stays saved and is remembered.</div>
+      <div id="loralist"></div>
+      <div class="status" id="lorastat"></div>
+    </div>
+    <label>Prompt strength <span class="v" id="v_guid">2.5</span><input type="range" id="guid" min="1.5" max="4.5" step="0.1" value="2.5"></label>
+    <label>Variations to try <span class="v" id="v_var">1</span><input type="range" id="ivar" min="1" max="4" value="1"></label>
+    <label>Seed (optional) <input type="number" id="iseed" placeholder="random"></label>
+    <button class="primary" id="iedit" disabled>Edit picture</button>
+    <button id="icancel" style="display:none;width:100%;margin-top:8px">Cancel</button>
+    <div class="pbar" id="ibar"><i id="ifill"></i></div>
+    <div class="status" id="istatus"></div>
+    <p class="hint">Runs fully offline on this Mac. A single edit can take several minutes, more at Maximum quality. Works on any photo or image. Tip: describe one change at a time, and use "Use as new input" to build up bigger edits step by step.</p>
+  </section>
+  <div class="right">
+    <section class="card" id="livecard" style="display:none">
+      <h2>Live preview <span class="hint" style="font-weight:400" id="livelab"></span></h2>
+      <img id="liveimg" alt="current step" style="width:100%;border-radius:8px;display:none">
+      <div class="empty" id="liveempty">Loading the model… the first preview appears after the first step.</div>
+    </section>
+    <section class="card" id="iconcard" style="display:none">
+      <h2>Console</h2>
+      <div class="console" id="conmini"></div>
+    </section>
+    <section class="card">
+      <h2>Result</h2>
+      <div class="empty" id="cempty">Choose a picture and describe the change.<br>Before and after will appear here with a slider.</div>
+      <div id="cwrap" style="display:none">
+        <div class="cmp" id="cmp">
+          <img id="cbefore" alt="before"><img id="cafter" class="after" alt="after">
+          <div class="line" id="cline"></div><span class="lab" style="left:8px">Original</span><span class="lab" style="right:8px">Edited</span>
+          <input type="range" id="cslide" min="0" max="100" value="50">
+        </div>
+        <div class="vars" id="ivars"></div>
+        <div class="dl" id="idl"></div>
+      </div>
+    </section>
+    <section class="card"><h2>History</h2><div class="grid" id="ihist"></div></section>
+  </div>
+</main>
+
+</div></div>
+<dialog id="sysdlg"><form method="dialog">
+  <h2 style="margin:0">System prompt</h2>
+  <p class="hint">Instructions the model follows in every chat. Leave empty to use the default.</p>
+  <textarea id="systext" rows="8"></textarea>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button id="sysreset" type="button">Reset to default</button>
+    <button id="syssave" value="ok" class="primary" style="width:auto;margin:0">Save</button></div>
+</form></dialog>
+<script>
+const $ = id => document.getElementById(id);
+const COLORS = () => ({ piano: getComputedStyle(document.documentElement).getPropertyValue('--piano').trim(),
+                        guitar: getComputedStyle(document.documentElement).getPropertyValue('--guitar').trim() });
+let current = null, data = null, samples = [], playing = false, ctx = null, t0 = 0, raf = 0, nodes = [], offset = 0;
+
+// ---- theme
+try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+$('theme').onclick = () => {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const cur = document.documentElement.dataset.theme || (dark ? 'dark' : 'light');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('theme', next); } catch (e) {}
+  draw();
+};
+
+// ---- remember every setting + running jobs across page refreshes
+const LS = Store;
+const FORM_IDS = ['count', 'tokens', 'temp', 'rep', 'pt', 'seed', 'both', 'm_piano', 'm_guitar',
+                  'livepv', 'preserve', 'iquality', 'isize', 'guid', 'ivar', 'iseed', 'iprompt'];
+(() => {
+  const saved = LS.get('jacobai-form') || {};
+  for (const id of FORM_IDS) {
+    const e = $(id); if (!e || !(id in saved)) continue;
+    if (e.type === 'checkbox') e.checked = !!saved[id]; else e.value = saved[id];
+  }
+  const save = e => {
+    if (!FORM_IDS.includes(e.target.id)) return;
+    const s = LS.get('jacobai-form') || {}; s[e.target.id] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; LS.set('jacobai-form', s);
+  };
+  document.addEventListener('input', save); document.addEventListener('change', save);
+})();
+const setJob = (k, v) => { const j = LS.get('jacobai-jobs') || {}; if (v) j[k] = v; else delete j[k]; LS.set('jacobai-jobs', j); };
+
+// ---- controls
+const bind = (id, out, fmt) => { const f = () => $(out).textContent = fmt($(id).value); $(id).oninput = f; f(); };
+bind('count', 'v_count', v => v);
+bind('tokens', 'v_tokens', v => '~' + Math.round(v * 0.045) + ' s');
+bind('temp', 'v_temp', v => (+v).toFixed(2));
+bind('rep', 'v_rep', v => (+v).toFixed(2));
+bind('pt', 'v_pt', v => v);
+$('cont').onchange = () => $('plabel').style.display = $('cont').value ? 'block' : 'none';
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+$('reset').onclick = () => {
+  [['count',2],['tokens',1000],['temp',0.95],['rep',1.12],['pt',64]].forEach(([id,v]) => { $(id).value = v; $(id).dispatchEvent(new Event('input')); });
+  $('both').checked = true; $('seed').value = ''; $('cont').value = ''; $('plabel').style.display = 'none';
+};
+
+// ---- library
+let libSig = '';
+async function loadLibrary(selectId) {
+  const fresh = await api('/api/samples'), sig = JSON.stringify(fresh) + '|' + current;
+  if (sig === libSig && !selectId) return;
+  libSig = sig; samples = fresh;
+  const body = $('lib');
+  body.innerHTML = '';
+  if (!samples.length) body.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">Nothing yet. Press Generate.</td></tr>';
+  for (const s of samples) {
+    const tr = document.createElement('tr');
+    tr.className = 'row' + (current === s.id ? ' sel' : '');
+    const label = s.kind === 'featured' ? `Featured ${s.name.replace('sample_', '#')}` : s.name.replace(/^gen_/, 'Mine ');
+    tr.innerHTML = `<td>${label} ${s.continued_from ? '<span class="tag">continued</span>' : ''}</td>
+      <td>${s.duration}s</td><td>${s.piano}</td><td>${s.guitar}</td>
+      <td><span class="tag">${s.kind === 'featured' ? 'from overnight run' : 'generated here'}</span></td>
+      <td class="act">${s.kind === 'mine' ? '<button data-del="1">Delete</button>' : ''}</td>`;
+    tr.onclick = e => { if (e.target.dataset.del) return; select(s.id, label); };
+    const del = tr.querySelector('[data-del]');
+    if (del) del.onclick = async () => {
+      if (!confirm('Delete this sample?')) return;
+      await api('/api/sample?id=' + encodeURIComponent(s.id), { method: 'DELETE' });
+      if (current === s.id) { stop(); current = null; data = null; showRoll(false); }
+      loadLibrary();
+    };
+    body.appendChild(tr);
+  }
+  const sel = $('cont');
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">Nothing (brand new)</option>' +
+    samples.map(s => `<option value="${s.id}">${s.kind === 'featured' ? 'Featured ' + s.name.replace('sample_', '#') : s.name.replace(/^gen_/, 'Mine ')}</option>`).join('');
+  sel.value = keep;
+  if (selectId) { const s = samples.find(x => x.id === selectId); if (s) select(s.id, s.kind === 'mine' ? s.name.replace(/^gen_/, 'Mine ') : s.name); }
+}
+
+async function select(id, label) {
+  stop();
+  current = id; offset = 0;
+  $('ptitle').textContent = label;
+  document.querySelectorAll('tr.row').forEach(r => r.classList.remove('sel'));
+  data = await api('/api/notes?id=' + encodeURIComponent(id));
+  $('play').disabled = $('stop').disabled = false;
+  const q = '/midi?id=' + encodeURIComponent(id);
+  $('dl').innerHTML = `<a href="${q}&part=both" download>${ico('download')} Both (.mid)</a><a href="${q}&part=piano" download>${ico('download')} Piano only</a><a href="${q}&part=guitar" download>${ico('download')} Guitar only</a>`;
+  showRoll(true); draw();
+  loadLibraryMarks();
+}
+function loadLibraryMarks() {
+  document.querySelectorAll('tr.row').forEach((r, i) => r.classList.toggle('sel', samples[i] && samples[i].id === current));
+}
+function showRoll(on) { $('roll').style.display = on ? 'block' : 'none'; $('empty').style.display = on ? 'none' : 'grid'; if (!on) { $('dl').innerHTML = ''; $('play').disabled = $('stop').disabled = true; $('ptitle').textContent = 'Select a sample below'; } }
+
+// ---- piano roll
+function visibleTracks() { return data ? data.tracks.filter(t => $('m_' + t.name) && $('m_' + t.name).checked) : []; }
+$('m_piano').onchange = $('m_guitar').onchange = () => { if (playing) { const p = pos(); stop(); offset = p; play(); } draw(); };
+function draw() {
+  const cv = $('roll');
+  if (!data) return;
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext('2d'); g.scale(dpr, dpr);
+  const all = data.tracks.flatMap(t => t.notes);
+  if (!all.length) return;
+  const lo = Math.min(...all.map(n => n[2])) - 2, hi = Math.max(...all.map(n => n[2])) + 2;
+  const dur = data.duration, col = COLORS();
+  const css = getComputedStyle(document.documentElement);
+  g.strokeStyle = css.getPropertyValue('--grid').trim(); g.lineWidth = 1;
+  for (let p = lo; p <= hi; p++) { if (p % 12 === 0) { const y = h - (p - lo) / (hi - lo + 1) * h; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } }
+  for (let s = 0; s < dur; s += 5) { const x = s / dur * w; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  for (const t of data.tracks) {
+    const on = $('m_' + t.name) && $('m_' + t.name).checked;
+    g.globalAlpha = on ? 0.9 : 0.12; g.fillStyle = col[t.name] || '#888';
+    for (const [s, d, p] of t.notes) g.fillRect(s / dur * w, h - (p - lo + 1) / (hi - lo + 1) * h, Math.max(2, d / dur * w), Math.max(2, h / (hi - lo + 1) - 1));
+  }
+  g.globalAlpha = 1;
+  const x = pos() / dur * w;
+  g.strokeStyle = css.getPropertyValue('--ink').trim(); g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+}
+window.addEventListener('resize', draw);
+$('roll').onclick = e => {
+  if (!data) return;
+  const r = e.target.getBoundingClientRect();
+  const p = (e.clientX - r.left) / r.width * data.duration;
+  if (playing) { stop(); offset = p; play(); } else { offset = p; draw(); }
+};
+
+// ---- playback (small WebAudio synth, no downloads)
+const pos = () => playing ? Math.min(data.duration, offset + ctx.currentTime - t0) : offset;
+function mtof(p) { return 440 * Math.pow(2, (p - 69) / 12); }
+function drive(amount) {
+  const n = 1024, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = i * 2 / n - 1; c[i] = Math.tanh(x * amount); }
+  return c;
+}
+function play() {
+  if (!data) return;
+  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+  ctx.resume();
+  stop(true);
+  playing = true; t0 = ctx.currentTime + 0.05;
+  const master = ctx.createGain(); master.gain.value = 0.35;
+  const comp = ctx.createDynamicsCompressor(); master.connect(comp); comp.connect(ctx.destination);
+  nodes = [master];
+  for (const t of visibleTracks()) {
+    const bus = ctx.createGain(); bus.gain.value = t.name === 'guitar' ? 0.5 : 0.8;
+    if (t.name === 'guitar') {
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+      const sh = ctx.createWaveShaper(); sh.curve = drive(t.program === 29 ? 5 : 2); sh.oversample = '2x';
+      bus.connect(sh); sh.connect(lp); lp.connect(master);
+    } else bus.connect(master);
+    for (const [s, d, p, v] of t.notes) {
+      if (s + d < offset) continue;
+      const when = t0 + Math.max(0, s - offset), len = Math.max(0.08, d - Math.max(0, offset - s));
+      const o = ctx.createOscillator(), e = ctx.createGain();
+      o.frequency.value = mtof(p); const vel = (v / 127) * 0.6 + 0.1;
+      if (t.name === 'piano') {
+        o.type = 'triangle';
+        e.gain.setValueAtTime(0.0001, when); e.gain.exponentialRampToValueAtTime(vel, when + 0.008);
+        e.gain.exponentialRampToValueAtTime(vel * 0.25, when + Math.min(len, 1.2)); e.gain.exponentialRampToValueAtTime(0.0001, when + len + 0.35);
+        const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = mtof(p) * 2;
+        const e2 = ctx.createGain(); e2.gain.value = 0.18; o2.connect(e2); e2.connect(e); o2.start(when); o2.stop(when + len + 0.4);
+      } else {
+        o.type = 'sawtooth';
+        e.gain.setValueAtTime(0.0001, when); e.gain.exponentialRampToValueAtTime(vel, when + 0.015);
+        e.gain.setValueAtTime(vel * 0.8, when + len * 0.9); e.gain.exponentialRampToValueAtTime(0.0001, when + len + 0.12);
+      }
+      o.connect(e); e.connect(bus); o.start(when); o.stop(when + len + 0.4);
+      nodes.push(o);
+    }
+    nodes.push(bus);
+  }
+  $('play').innerHTML = ico('pause') + ' Pause';
+  tick();
+}
+function stop(keep) {
+  if (!keep && playing) offset = pos();
+  playing = false;
+  cancelAnimationFrame(raf);
+  for (const n of nodes) { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }
+  nodes = [];
+  $('play').innerHTML = ico('play') + ' Play';
+}
+function tick() {
+  if (!playing) return;
+  draw();
+  if (pos() >= data.duration) { stop(true); offset = 0; draw(); return; }
+  raf = requestAnimationFrame(tick);
+}
+$('play').onclick = () => { if (playing) stop(); else { if (offset >= data.duration - 0.1) offset = 0; play(); } };
+$('stop').onclick = () => { stop(true); offset = 0; draw(); };
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName) && !e.target.isContentEditable && $('tab-music').style.display !== 'none' && data) { e.preventDefault(); $('play').click(); } });
+
+// ---- generate
+async function followMusic(job, resumed) {
+  $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = resumed ? 'Reconnecting to your running generation…' : 'Starting…';
+  try {
+    let j;
+    do {
+      await new Promise(r => setTimeout(r, resumed ? 300 : 1500)); resumed = false;
+      j = await api('/api/job?id=' + job);
+      if (j.message === 'unknown job') { $('status').textContent = 'The server was restarted, so that generation was lost.'; setJob('music', null); $('go').disabled = false; $('bar').style.display = 'none'; return; }
+      $('status').textContent = j.message;
+      if (j.results.length) loadLibrary();
+    } while (j.status === 'running');
+    $('status').textContent = j.status === 'error' ? 'Error: ' + j.message : j.message + (j.results.length ? ` · ${j.results.length} new` : '');
+    await loadLibrary(j.results[0]);
+  } catch (e) { $('status').textContent = 'Error: ' + e.message; }
+  setJob('music', null); $('go').disabled = false; $('bar').style.display = 'none';
+}
+$('go').onclick = async () => {
+  $('go').disabled = true; $('bar').style.display = 'block'; $('status').textContent = 'Starting…';
+  const body = {
+    count: +$('count').value, tokens: +$('tokens').value, temp: +$('temp').value, rep: +$('rep').value,
+    need_both: $('both').checked, seed: $('seed').value, continue_id: $('cont').value, prompt_tokens: +$('pt').value,
+  };
+  try {
+    const { job } = await api('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    setJob('music', job); followMusic(job);
+  } catch (e) { $('status').textContent = 'Error: ' + e.message; $('go').disabled = false; $('bar').style.display = 'none'; }
+};
+
+
+// ---- picture editor
+let srcData = null, imgReady = false, cur = null, curIdx = 0;
+bind('guid', 'v_guid', v => (+v).toFixed(1));
+bind('ivar', 'v_var', v => v);
+async function checkImg() {
+  try { const s = await api('/api/img/status'); imgReady = s.ready; $('isetup').style.display = s.ready ? 'none' : 'block'; } catch (e) {}
+  updateBtn();
+}
+function updateBtn() { $('iedit').disabled = !(srcData && imgReady); }
+function setSource(dataUrl) { srcData = dataUrl; $('srcprev').src = dataUrl; $('srcprev').style.display = 'block'; $('srcwrap').style.display = ''; updateBtn(); }
+function clearSource() { srcData = null; $('srcprev').removeAttribute('src'); $('srcwrap').style.display = 'none'; $('file').value = ''; LS.set('jacobai-src', null); updateBtn(); }
+$('srcdel').onclick = clearSource;
+function persistSrc(url) {
+  const im = new Image();
+  im.onload = () => { const s = Math.min(1, 1536 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+    c.width = Math.round(im.width * s); c.height = Math.round(im.height * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    LS.set('jacobai-src', c.toDataURL('image/jpeg', 0.92)); };
+  im.src = url;
+}
+function readFile(f) { if (!f || !f.type.startsWith('image/')) return; const r = new FileReader(); r.onload = () => { setSource(r.result); persistSrc(r.result); }; r.readAsDataURL(f); }
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => readFile(e.target.files[0]);
+['dragover', 'dragenter'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => $('drop').addEventListener(ev, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+$('drop').addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
+
+function setSlide(v) { $('cafter').style.clipPath = `inset(0 0 0 ${v}%)`; $('cline').style.left = `calc(${v}% - 1px)`; }
+$('cslide').oninput = e => setSlide(e.target.value);
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function showResult(job, idx = 0) {
+  cur = job; curIdx = idx;
+  if (!job.results.length) return;
+  $('cempty').style.display = 'none'; $('cwrap').style.display = 'block';
+  $('cbefore').src = '/img/' + job.input; $('cafter').src = '/img/' + job.results[idx];
+  $('cslide').value = 50; setSlide(50);
+  $('ivars').innerHTML = job.results.length > 1 ? job.results.map((f, i) => `<img src="/img/${f}" class="${i === idx ? 'on' : ''}" data-i="${i}">`).join('') : '';
+  $('ivars').querySelectorAll('img').forEach(im => im.onclick = () => showResult(job, +im.dataset.i));
+  const f = job.results[idx];
+  $('idl').innerHTML = `<a href="/img/${f}?download=1" download>${ico('download')} Download PNG</a><button id="reuse">Use as new input</button>`;
+  $('reuse').onclick = async () => {
+    const b = await (await fetch('/img/' + f)).blob();
+    const r = new FileReader(); r.onload = () => { setSource(r.result); $('istatus').textContent = 'Result loaded as the new input. Describe the next change.'; scrollTo({ top: 0, behavior: 'smooth' }); };
+    r.readAsDataURL(b);
+  };
+}
+
+let histSig = '';
+async function loadHist() {
+  const hist = await api('/api/img/history'), sig = JSON.stringify(hist.map(m => m.id));
+  if (sig === histSig) return;
+  histSig = sig;
+  $('ihist').innerHTML = hist.length ? '' : '<span style="color:var(--muted);font-size:13px">Your edits will appear here.</span>';
+  for (const m of hist) {
+    const d = document.createElement('div'); d.className = 'it';
+    d.innerHTML = `<img src="/img/${m.results[0]}" loading="lazy"><p>${m.prompt.replace(/</g, '&lt;')}</p><button style="padding:2px 8px;font-size:11px;margin-top:4px">Delete</button>`;
+    d.onclick = e => { if (e.target.tagName === 'BUTTON') return; showResult(m, 0); scrollTo({ top: 0, behavior: 'smooth' }); };
+    d.querySelector('button').onclick = async () => { if (confirm('Delete this edit?')) { await api('/api/img/item?id=' + m.id, { method: 'DELETE' }); loadHist(); } };
+    $('ihist').appendChild(d);
+  }
+}
+
+async function loadLoras() {
+  let r; try { r = (await api('/api/img/loras')).loras; } catch (e) { return; }
+  $('loranone').style.display = r.length ? 'none' : '';
+  $('loralist').innerHTML = '';
+  for (const l of r) {
+    const d = document.createElement('div'); d.className = 'loraitem';
+    d.innerHTML = `<label class="tg" style="flex:1;min-width:0"><input type="checkbox" ${l.active ? 'checked' : ''}> <span class="ln" title="${l.name}">${l.name}</span> <span class="hint">${l.mb} MB</span></label>
+      <input type="number" min="0" max="2" step="0.1" value="${l.scale}" title="Strength (1 = as trained)" style="width:62px"><button type="button" title="Delete this LoRA file">${ico('x')}</button>`;
+    const [cb, sc, del] = [d.querySelector('input[type=checkbox]'), d.querySelector('input[type=number]'), d.querySelector('button')];
+    const set = body => api('/api/img/lora/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: l.name, ...body }) }).catch(e => $('lorastat').textContent = e.message);
+    cb.onchange = () => set({ active: cb.checked }); sc.onchange = () => set({ scale: +sc.value });
+    del.onclick = async () => { if (confirm('Delete ' + l.name + ' from this Mac?')) { await api('/api/img/lora?name=' + encodeURIComponent(l.name), { method: 'DELETE' }); loadLoras(); } };
+    $('loralist').appendChild(d);
+  }
+}
+$('lorabtn').onclick = () => $('lorafile').click();
+$('lorafile').onchange = () => {
+  const f = $('lorafile').files[0]; if (!f) return;
+  $('lorastat').textContent = 'Uploading ' + f.name + '…';
+  const x = new XMLHttpRequest(); x.open('POST', '/api/img/lora/upload?name=' + encodeURIComponent(f.name));
+  x.upload.onprogress = e => { if (e.lengthComputable) $('lorastat').textContent = `Uploading ${f.name}… ${Math.round(e.loaded / e.total * 100)}%`; };
+  x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch (e) {} $('lorastat').textContent = x.status === 200 ? 'Added ' + j.name + ' (switched on).' : (j.error || 'Upload failed.'); loadLoras(); };
+  x.onerror = () => $('lorastat').textContent = 'Upload failed.';
+  x.send(f); $('lorafile').value = '';
+};
+loadLoras();
+let jobId = null;
+$('icancel').onclick = async () => { if (jobId) await fetch('/api/img/cancel?id=' + jobId, { method: 'POST' }); };
+async function followImg(job, resumed) {
+  jobId = job; setJob('img', job);
+  $('iedit').disabled = true; $('livecard').style.display = ''; $('iconcard').style.display = ''; $('liveimg').style.display = 'none'; $('liveempty').style.display = ''; $('livelab').textContent = ''; $('icancel').style.display = 'block'; $('ibar').style.display = 'block'; $('ifill').style.width = '0';
+  $('istatus').textContent = resumed ? 'Reconnecting to your running edit…' : 'Starting… the first step includes loading the model.';
+  let t0 = Date.now();
+  try {
+    let j;
+    do {
+      await new Promise(r => setTimeout(r, resumed ? 300 : 2000));
+      j = await api('/api/img/job?id=' + job);
+      if (j.message === 'unknown job') { $('istatus').textContent = 'The server was restarted, so that edit was lost.'; setJob('img', null); $('icancel').style.display = 'none'; $('ibar').style.display = 'none'; $('livecard').style.display = 'none'; jobId = null; updateBtn(); return; }
+      if (resumed) {
+        resumed = false; if (j.started) t0 = j.started * 1000;
+        if (!srcData && j.input) { fetch('/img/' + j.input).then(r => r.blob()).then(b => { const fr = new FileReader(); fr.onload = () => setSource(fr.result); fr.readAsDataURL(b); }).catch(() => {}); }
+      }
+      const total = j.steps * j.variations, done = (Math.max(j.variation, 1) - 1) * j.steps + j.step;
+      $('ifill').style.width = (done / total * 100).toFixed(1) + '%';
+      const el = (Date.now() - t0) / 1000;
+      $('istatus').textContent = j.status === 'running' ? `Variation ${j.variation} of ${j.variations} · step ${j.step} of ${j.steps} · ${mmss(el)} elapsed` + (done > 2 ? ` · about ${mmss(el / done * (total - done))} left` : '') : (j.message || '');
+      if (j.preview && j.status === 'running') {
+        $('liveimg').src = '/img/' + j.preview + '?n=' + j.preview_n; $('liveimg').style.display = ''; $('liveempty').style.display = 'none';
+        $('livelab').textContent = `variation ${j.variation}, after step ${j.step} of ${j.steps}`;
+      }
+      if (j.results && j.results.length && (!cur || cur.input !== j.input || cur.results.length !== j.results.length)) showResult(j, j.results.length - 1);
+    } while (j.status === 'running' || j.status === 'queued');
+    $('istatus').textContent = j.status === 'done' ? `Done in ${mmss((Date.now() - t0) / 1000)}.` : j.message;
+    if (j.status === 'done') { showResult(j, 0); loadHist(); }
+  } catch (e) { $('istatus').textContent = 'Error: ' + e.message; }
+  setJob('img', null); $('icancel').style.display = 'none'; $('ibar').style.display = 'none'; $('livecard').style.display = 'none'; updateBtn(); jobId = null;
+}
+let imgStarting = false;
+$('iedit').onclick = async () => {
+  if (!$('iprompt').value.trim()) { $('istatus').textContent = 'Write what you want changed first.'; return; }
+  $('iedit').disabled = true; imgStarting = true; $('istatus').textContent = 'Starting… the first step includes loading the model.';
+  try {
+    const { job } = await api('/api/img/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      image: srcData, prompt: $('iprompt').value, preserve: $('preserve').checked, quality: $('iquality').value,
+      max_side: +$('isize').value, live_preview: $('livepv').checked, guidance: +$('guid').value, variations: +$('ivar').value, seed: $('iseed').value }) });
+    followImg(job); imgStarting = false;
+  } catch (e) { imgStarting = false; $('istatus').textContent = 'Error: ' + e.message; updateBtn(); }
+};
+
+// ---- live updates: everything on the page follows the server without refreshing
+async function liveTick() {
+  if (document.hidden) return;
+  try {
+    const a = await api('/api/active');
+    if (a.music.length && $('go').disabled === false) followMusic(a.music[0], true);
+    if (a.img.length && !jobId && !imgStarting) followImg(a.img[0], true);
+    await Promise.all([loadLibrary(), loadHist()]);
+  } catch (e) {}
+}
+setInterval(liveTick, 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) liveTick(); });
+
+// restore the picture you were working on and re-attach to anything still running
+{ const s = LS.get('jacobai-src'); if (s) setSource(s); }
+{ const rj = LS.get('jacobai-jobs') || {}; if (rj.music) followMusic(rj.music, true); if (rj.img) followImg(rj.img, true); }
+
+loadLibrary().then(() => { const f = samples.find(s => s.kind === 'featured') || samples[0]; if (f) select(f.id, f.kind === 'featured' ? 'Featured ' + f.name.replace('sample_', '#') : f.name); });
+</script>
+<script src="/static/chat.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#141416">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="unplugged.ai">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"><link rel="icon" href="/icons/favicon.png">
+<title>unplugged.ai · Sign in</title>
+<style>
+  :root { --bg:#fff; --panel:#f7f7f8; --ink:#0d0d0d; --muted:#6e6e80; --line:#e5e5e5; --accent:#0d0d0d; --accent-ink:#fff; --bad:#c0392b; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#212121; --panel:#2a2a2a; --ink:#ececec; --muted:#9b9b9b; --line:#3a3a3a; --accent:#ececec; --accent-ink:#212121; --bad:#ff7b6b; } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--ink); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; padding:16px; }
+  .card { width:min(400px,100%); background:var(--panel); border:1px solid var(--line); border-radius:24px; padding:28px; border-color:transparent; }
+  h1 { margin:0 0 2px; font-size:24px; } .sub { color:var(--muted); margin:0 0 18px; font-size:14px; }
+  .seg { display:flex; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:3px; margin-bottom:16px; }
+  .seg button { flex:1; border:none; background:none; color:var(--muted); padding:7px; border-radius:8px; font:inherit; cursor:pointer; }
+  .seg button.on { background:var(--panel); color:var(--ink); box-shadow:0 0 0 1px var(--line); }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:12px; }
+  input { width:100%; margin-top:4px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); font:inherit; }
+  button.primary { width:100%; padding:11px; border-radius:10px; border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink); font:inherit; font-weight:600; cursor:pointer; }
+  button.ghost { width:100%; margin-top:10px; padding:10px; border-radius:10px; border:1px solid var(--line); background:none; color:var(--ink); font:inherit; cursor:pointer; }
+  .err { color:var(--bad); font-size:13px; min-height:18px; margin:6px 0 10px; }
+  .note { color:var(--muted); font-size:12px; margin-top:14px; }
+  .hide { display:none; }
+</style></head>
+<body>
+<div class="card">
+  <img src="/icons/icon-192.png" alt="" width="64" height="64" style="display:block;margin:0 auto 10px;border-radius:15px"><h1>unplugged.ai</h1>
+  <p class="sub" id="sub">Your private AI. Runs fully offline on this Mac.</p>
+  <div class="seg" id="seg"><button data-m="in" class="on">Sign in</button><button data-m="up" id="tabup">Create account</button></div>
+  <form id="f" autocomplete="on">
+    <label>Username<input id="name" name="username" autocomplete="username" autocapitalize="none" required></label>
+    <label>Password<input id="pw" name="password" type="password" autocomplete="current-password" required></label>
+    <label id="pw2l" class="hide">Repeat password<input id="pw2" type="password" autocomplete="new-password"></label>
+    <div class="err" id="err"></div>
+    <button class="primary" id="go" type="submit">Sign in</button>
+  </form>
+  <button class="ghost" id="guest">Continue without an account</button>
+  <div class="note" id="note">Without an account you can chat, but nothing is kept: your chats and files are deleted when you close the browser.</div>
+</div>
+<script>
+/*INFO*/
+const $ = id => document.getElementById(id);
+let mode = 'in';
+function setMode(m) {
+  mode = m; $('go').textContent = m === 'in' ? 'Sign in' : 'Create account';
+  $('pw2l').classList.toggle('hide', m === 'in'); $('pw').autocomplete = m === 'in' ? 'current-password' : 'new-password';
+  document.querySelectorAll('#seg button').forEach(b => b.classList.toggle('on', b.dataset.m === m)); $('err').textContent = '';
+}
+document.querySelectorAll('#seg button').forEach(b => b.onclick = () => setMode(b.dataset.m));
+if (!INFO.local) {
+  $('tabup').classList.add('hide'); $('guest').classList.add('hide');
+  $('note').textContent = 'Sign in with the account you created on the Mac. Your Mac does all the calculating.';
+} else if (INFO.first) { setMode('up'); $('sub').textContent = 'Welcome. Create the first account to get started.'; }
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Something went wrong.'); return j;
+}
+$('f').onsubmit = async e => {
+  e.preventDefault(); $('err').textContent = '';
+  if (mode === 'up' && $('pw').value !== $('pw2').value) { $('err').textContent = 'The two passwords do not match.'; return; }
+  $('go').disabled = true;
+  try { await post(mode === 'in' ? '/api/auth/login' : '/api/auth/register', { name: $('name').value, password: $('pw').value }); if (window.caches) { try { for (const k of ['jacobai-pages','jacobai-data','jacobai-img']) await caches.delete(k); } catch (e) {} } location.reload(); }
+  catch (er) { $('err').textContent = er.message; $('go').disabled = false; }
+};
+$('guest').onclick = async () => { try { await post('/api/auth/guest'); location.reload(); } catch (er) { $('err').textContent = er.message; } };
+</script></body></html>
