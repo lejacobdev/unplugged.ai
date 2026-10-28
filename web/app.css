@@ -633,3 +633,6 @@ pre.lyr { white-space: pre-wrap; font: inherit; font-size: 13.5px; color: var(--
 .chead .incog:hover { background: var(--hover); color: var(--ink); }
 .chead .incog.on { background: var(--hover); color: var(--ink); }
 .chead .incog .i { width: 19px; height: 19px; }
+.brand { cursor: pointer; border-radius: 10px; transition: background .15s; }
+.brand:hover { background: var(--hover); }
+.brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

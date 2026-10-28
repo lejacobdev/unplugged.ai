@@ -188,6 +188,8 @@
   }
   function newChat(incognito) { if (streaming) return; leaveIncognito(); cur = { id: null, messages: [], title: incognito === true ? 'Incognito chat' : 'New chat', incognito: incognito === true }; attached = null; renderAttach(); showTab('chat'); render(); renderList(); el('input').focus(); }
   el('newchat').onclick = () => newChat(false);
+  el('brand').onclick = () => el('newchat').click();
+  el('brand').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el('newchat').click(); } };
   el('incog').onclick = () => newChat(!(cur && cur.incognito));
   function leaveIncognito() { if (cur && cur.incognito) fetch('/api/chat/end-incognito', { method: 'POST' }).catch(() => {}); }
   const setTitle = () => { el('ttl').innerHTML = (cur.incognito ? ico('incognito') + ' ' : '') + esc(cur.title || 'New chat'); el('tab-chat').classList.toggle('incognito', !!cur.incognito); el('incog').classList.toggle('on', !!cur.incognito); el('incog').setAttribute('aria-pressed', !!cur.incognito); el('incog').innerHTML = ico(cur.incognito ? 'eye' : 'incognito'); el('incog').title = cur.incognito ? 'Leave incognito: start a normal chat' : 'Incognito chat: not saved, gone when you leave it'; };
