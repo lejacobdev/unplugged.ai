@@ -115,15 +115,18 @@ def midi_part(path: Path, part: str) -> bytes:
 def run_job(job_id, p):
     job = jobs[job_id]
     try:
-        start = [tok["BOS_None"]]
-        if p.get("prompt_path"):
-            seq = tok(Score(str(p["prompt_path"])))
+        bos = [tok["BOS_None"]]
+        starts = []
+        for pp in (p.get("prompt_paths") or ([p["prompt_path"]] if p.get("prompt_path") else [])):
+            seq = tok(Score(str(pp)))
             seq = seq[0] if isinstance(seq, list) else seq
-            start += list(seq.ids)[: int(p["prompt_tokens"])]
-        elif p.get("continue_id"):
+            starts.append(bos + list(seq.ids)[: int(p["prompt_tokens"])])
+        if not starts and p.get("continue_id"):
             seq = tok(Score(str(resolve(p["continue_id"], p["owner"]))))
             seq = seq[0] if isinstance(seq, list) else seq
-            start += list(seq.ids)[: int(p["prompt_tokens"])]
+            starts.append(bos + list(seq.ids)[: int(p["prompt_tokens"])])
+        starts = starts or [bos]
+        start = starts[0]
         want = int(p["count"])
         tries = 0
         rep = max(float(p["rep"]), 1.05)  # below this the model tends to loop on one token
@@ -133,6 +136,10 @@ def run_job(job_id, p):
         with gen_lock:
             while len(job["results"]) < want and tries < want * 8:
                 tries += 1
+                # a reference that keeps failing is swapped for another by the same artist; after four tries the piece is written without one
+                start = starts[(tries - 1) % len(starts)] if (tries <= 4 or not p.get("prompt_paths")) else bos
+                if start is bos and p.get("prompt_paths") and not job.get("note"):
+                    job["note"] = "Could not follow that style closely, so this is a general piece."
                 job["message"] = f"Composing sample {len(job['results']) + 1} of {want}…"
                 logbus.log("music", owner=p["owner"]["uid"], text=f"composing sample {len(job['results']) + 1}/{want}: up to {int(p['tokens'])} tokens, creativity {p['temp']}, variety {rep:.2f}" + (f", continuing {p['continue_id']}" if p.get("continue_id") else ""))
                 if p.get("seed") not in (None, ""):
@@ -168,7 +175,7 @@ def run_job(job_id, p):
                 job["results"].append(f"mine/{name}")
                 logbus.log("music", owner=p["owner"]["uid"], text=f"saved {name}.mid: {n_p} piano notes, {n_g} guitar notes")
         job["status"] = "done"
-        job["message"] = "Done" if job["results"] else ("No usable samples. The model kept looping or wrote too little, even after raising Variety automatically. " + ("Try a longer Length, or untick 'Require both'." if p.get("need_both") else "Try a longer Length and Creativity near 0.95."))
+        job["message"] = ("Done" + (". " + job["note"] if job.get("note") else "")) if job["results"] else ("No usable samples. The model kept looping or wrote too little, even after raising Variety automatically. " + ("Try a longer Length, or untick 'Require both'." if p.get("need_both") else "Try a longer Length and Creativity near 0.95."))
     except Exception as e:
         job["status"] = "error"
         job["message"] = f"{type(e).__name__}: {e}"
@@ -221,6 +228,29 @@ def find_style_reference(style):
     return e[4], e[2], e[3]
 
 
+def style_candidates(style, n=5):
+    """Up to n library pieces matching the request that contain both piano and guitar (so the continuation can too)."""
+    first = find_style_reference(style)
+    if not first:
+        return []
+    words = [w for w in _norm(style).split() if w not in _FILLER]
+    q = " " + " ".join(words) + " "
+    pool = [e for e in _style_index if e[0] == _norm(first[1])] or [e for e in _style_index if e[4] == first[0]]
+    random.shuffle(pool)
+    out = []
+    for e in pool[:40]:
+        try:
+            sc = Score(str(e[4]))
+            progs = {t.program for t in sc.tracks if len(t.notes) > 10}
+            if progs & PIANO and progs & GUITAR:
+                out.append((e[4], e[2], e[3]))
+        except Exception:
+            continue
+        if len(out) >= n:
+            break
+    return out or [first]
+
+
 def start_music(owner, ephemeral, style="", length="medium", creativity="balanced", count=1, cont=None):
     """Starts a background generation job. Returns (job id, reference or None)."""
     tokens = {"short": 500, "medium": 800, "long": 1000}.get(length, 800)
@@ -231,10 +261,11 @@ def start_music(owner, ephemeral, style="", length="medium", creativity="balance
     except Exception:
         cont = None
     style = (style or "").strip()
-    ref = find_style_reference(style) if style and not cont else None
+    cands = style_candidates(style) if style and not cont else []
+    ref = cands[0] if cands else None
     count = max(1, min(int(count or 1), 4))
     p = {"owner": owner, "ephemeral": bool(ephemeral), "count": count, "tokens": tokens, "temp": temp, "top_p": 0.95, "rep": rep, "need_both": True,
-         "prompt_tokens": 96 if ref else 64, "continue_id": cont, "prompt_path": str(ref[0]) if ref else None}
+         "prompt_tokens": 96 if ref else 64, "continue_id": cont, "prompt_path": str(ref[0]) if ref else None, "prompt_paths": [str(c[0]) for c in cands]}
     jid = uuid.uuid4().hex[:8]
     jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "Starting the music model…", "results": [], "count": count, "started": time.time()}
     threading.Thread(target=run_job, args=(jid, p), daemon=True).start()
@@ -256,7 +287,7 @@ def tool_generate_music(args, chat_obj, owner):
 
 def tool_edit_picture(args, chat_obj, owner):
     if not imgedit.status()["ready"]:
-        return "The offline image model is not installed yet. Tell the user to run setup_image_model.sh (see the Pictures tab).", None
+        return "The offline image model is not installed yet. Tell the user to run setup_image_model.sh (see the Picture edit tab).", None
     name = next((m["images"][-1] for m in reversed(chat_obj["messages"]) if m.get("images")), None)
     if not name:
         return "No picture is attached to this chat. Ask the user to drag a picture into the chat (or use the paperclip).", None
