@@ -436,8 +436,8 @@
   async function fillVoices() {
     const sel = el('s-voice'); if (!sel) return;
     try { if (!voiceList) voiceList = (await J('/api/voice/voices')).items; } catch (e) { return; }
-    const mine = voiceList.filter(v => /^en/.test(v.lang)).concat(voiceList.filter(v => !/^en/.test(v.lang)));
-    sel.innerHTML = '<option value="">System default</option>' + mine.map(v => `<option value="${esc(v.name)}">${esc(v.name)} (${v.lang.replace('_', '-')})</option>`).join('');
+    const mine = voiceList.filter(v => v.natural || /^en/.test(v.lang)).concat(voiceList.filter(v => !v.natural && !/^en/.test(v.lang)));
+    sel.innerHTML = '<option value="">Default</option>' + mine.map(v => `<option value="${esc(v.name)}">${esc(v.label || v.name)}</option>`).join('');
     sel.value = PF.voice || ''; if (sel._ddSync) sel._ddSync();
   }
   function stopSpeech() { if (audioEl) { audioEl.pause(); audioEl = null; } if (speakBtn) { speakBtn.innerHTML = ico('speaker'); speakBtn.classList.remove('on'); speakBtn = null; } }

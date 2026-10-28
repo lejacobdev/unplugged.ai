@@ -23,6 +23,9 @@ if [ "$WHAT" = all ] || [ "$WHAT" = voice ]; then
   [ -x .venv-voice/bin/python ] || uv venv --python 3.12 .venv-voice
   uv pip install --python .venv-voice/bin/python mlx-whisper
   .venv-voice/bin/python -c "from huggingface_hub import snapshot_download; print(snapshot_download('mlx-community/whisper-large-v3-turbo'))"
+  echo "== Natural voice for reading answers aloud (Kokoro-82M, about 0.4 GB plus Python packages)"
+  uv pip install --python .venv-voice/bin/python mlx-audio "misaki[en]" soundfile "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+  .venv-voice/bin/python -c "from huggingface_hub import snapshot_download; print(snapshot_download('mlx-community/Kokoro-82M-bf16'))"
 fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = image ]; then
