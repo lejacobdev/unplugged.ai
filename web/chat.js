@@ -102,7 +102,7 @@
   let chats = [], cur = { id: null, messages: [], title: 'New chat' }, streaming = false, ctrl = null, attached = null, files = [];
   const S = Store.get('chat-settings') || {};
   const settings = { model: S.model || 'gpt-oss:20b', think: S.think || 'low', tools: S.tools !== false, system: S.system || '' };
-  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true, memory: true, web: false, speak: false, voice: '' }, Store.get('prefs') || {});
+  const PF = Object.assign({ name: '', about: '', style: 'default', instr: S.system || '', size: 'm', enter: true, memory: true, web: false, warnheavy: true, speak: false, voice: '' }, Store.get('prefs') || {});
   const savePrefs = () => Store.set('prefs', PF);
   const saveSettings = () => Store.set('chat-settings', settings);
 
@@ -139,7 +139,7 @@
   async function loadModels() {
     try {
       const s = await J('/api/chat/status'); macDown = false;
-      setBanner(s.ok ? (s.training ? 'A heavy job (picture editing or training) is running on this Mac. The language model shares its memory, so chatting now will be slow and will slow that job down. For fast chat, wait until it finishes.' : '') : 'Ollama is not running, so there is no language model to chat with. Open the Ollama app (or run "ollama serve") and reload. The Music and Album cover tabs still work.');
+      setBanner(s.ok ? (s.training && PF.warnheavy !== false ? 'A heavy job (picture editing or training) is running on this Mac. The language model shares its memory, so chatting now will be slow and will slow that job down. For fast chat, wait until it finishes.' : '') : 'Ollama is not running, so there is no language model to chat with. Open the Ollama app (or run "ollama serve") and reload. The Music and Album cover tabs still work.');
       el('stat').innerHTML = (ME.kind === 'guest' ? 'Guest session · ' : 'Signed in · ') + `<span class="dotstat ${s.ok ? 'ok' : 'bad'}" title="${s.ok ? 'Language model connected' : 'Language model offline'}"></span>`;
       modelLabels = Object.fromEntries(s.models.map(m => [m.name, m.label || m.name]));
       const opts = s.models.map(m => `<option value="${m.name}" data-desc="${esc(m.desc || '')}">${m.label || m.name}</option>`).join('');
@@ -646,7 +646,7 @@
   function fill() {
     let t = 'auto'; try { t = localStorage.getItem('theme') || 'auto'; } catch (e) {}
     setSeg('s-theme', t); setSeg('s-size', PF.size); setSeg('p-style', PF.style);
-    el('s-enter').checked = PF.enter; el('s-web').checked = PF.web === true; el('s-speak').checked = PF.speak === true; fillVoices(); el('s-tools').checked = settings.tools; el('s-think').value = settings.think;
+    el('s-enter').checked = PF.enter; el('s-web').checked = PF.web === true; el('s-speak').checked = PF.speak === true; el('s-warn').checked = PF.warnheavy !== false; fillVoices(); el('s-tools').checked = settings.tools; el('s-think').value = settings.think;
     el('s-model').innerHTML = el('model').innerHTML; el('s-model').value = settings.model;
     el('p-name').value = PF.name; el('p-about').value = PF.about; el('p-instr').value = PF.instr;
     document.dispatchEvent(new Event('ui-sync'));
@@ -769,6 +769,7 @@
   dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
   el('gear').onclick = () => open('general');
   el('s-web').onchange = async () => { if (el('s-web').checked && !await UI.confirm('Searches and the pages the model opens will leave this Mac and go to the internet. Everything else stays local.', { title: 'Allow web access?', ok: 'Allow' })) { el('s-web').checked = false; return; } PF.web = el('s-web').checked; savePrefs(); };
+  el('s-warn').onchange = () => { PF.warnheavy = el('s-warn').checked; savePrefs(); loadModels(); };
   el('s-speak').onchange = () => { PF.speak = el('s-speak').checked; savePrefs(); if (!PF.speak) stopSpeech(); };
   el('s-voice').onchange = () => { PF.voice = el('s-voice').value; savePrefs(); };
   el('s-enter').onchange = () => { PF.enter = el('s-enter').checked; savePrefs(); };
