@@ -26,7 +26,8 @@ import imgedit
 import logbus
 from common import ROOT, make_tokenizer
 
-CKPT = ROOT / "ckpt/final_strong"
+# The general model (trained on piano + electric guitar MIDI for everyone). Point UNPLUGGED_MUSIC_CKPT at a personal fine-tune to use that instead.
+CKPT = Path(os.environ.get("UNPLUGGED_MUSIC_CKPT", "")) if os.environ.get("UNPLUGGED_MUSIC_CKPT") else ROOT / "ckpt/base"
 FEATURED = ROOT / "out"
 MINE = ROOT / "dashboard_samples"
 WEB = ROOT / "web"

@@ -2,7 +2,7 @@
 
 Groups written under data/clean/:
   base_lakh/, base_maestro/   general pretraining data
-  mine_core/                  exact versions of the songs in songs.md
+  mine_core/                  exact versions of the songs in examples/songs.example.md
   mine_style/                 other songs by artists you like
 Each file is named  <artist>__<title>__<n>.mid  so splits can be made per song.
 """

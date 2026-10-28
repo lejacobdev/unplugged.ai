@@ -20,7 +20,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone as an app. Nothing
 | | |
 |---|---|
 | **Chat** | A ChatGPT-style interface on your own models: **stereo 2** (stronger reasoning, `gpt-oss:20b`) and **mono 2** (quicker and simpler, `qwen3:14b`). Reasoning effort switch, tool calling, markdown, code blocks, chat history, incognito chats. |
-| **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together, in the style of the songs in [`songs.md`](songs.md). Piano roll, in-browser preview, MIDI download. |
+| **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Piano roll, in-browser preview, MIDI download. |
 | **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
 | **Console** | A live log of everything the models are doing. |
 | **Accounts** | Per-user history and settings, guest mode that deletes everything when you leave, incognito chats. |
@@ -94,7 +94,7 @@ It walks you through accepting the license, logging in to Hugging Face, download
 
 ### 5. Music model (optional, a few hours of training)
 
-The music model is trained from scratch on piano and electric-guitar MIDI, then specialised on the songs listed in [`songs.md`](songs.md). Edit that list to make it your own taste.
+The music model is a small GPT trained from scratch on piano and electric-guitar MIDI. The default model is **general**: it is trained on a broad mix of music and is not tuned to anyone's taste, so it works for everyone.
 
 ```bash
 mkdir -p data && cd data
@@ -106,15 +106,17 @@ curl -L -O https://storage.googleapis.com/magenta-data/datasets/maestro/v3.0.0/m
 mkdir -p base_midi && unzip -q maestro-v3.0.0-midi.zip -d base_midi
 cd ..
 
-# clean -> tokenize -> pretrain -> fine-tune on your songs -> generate samples
+# clean -> tokenize -> pretrain (writes ckpt/base, the general model)
 caffeinate -dimsu ./run_all.sh
 ```
 
-`run_all.sh` is resumable: stop it any time and run it again. Defaults are 230 minutes of pretraining and 45 minutes of LoRA fine-tuning (`BASE_MIN` and `LORA_MIN` change that). Keep the Mac plugged in; on battery it throttles hard.
+`run_all.sh` is resumable: stop it any time and run it again. Defaults are 230 minutes of pretraining (`BASE_MIN`) and a personal fine-tuning stage (`LORA_MIN`, see below). Keep the Mac plugged in; on battery it throttles hard. The app uses `ckpt/base` unless you set `UNPLUGGED_MUSIC_CKPT=/path/to/other/checkpoint`.
 
-An optional second round (`./run_v2.sh`) ranks the general songs by how close they are to your taste and trains on those first. Notes on the pipeline and results are in [docs/music-model-notes.md](docs/music-model-notes.md).
+**Make it yours (optional).** The personal stage fine-tunes the general model on songs you choose. Copy [`examples/songs.example.md`](examples/songs.example.md) to `songs.md`, list your own songs, adjust the `CORE` table in [`clean_midi.py`](clean_midi.py), run `./run_all.sh` again and start the app with `UNPLUGGED_MUSIC_CKPT=ckpt/final`. In testing this changed held-out loss only slightly (3.134 to 3.094), so the general model is already close.
 
-Until a model exists in `ckpt/final_strong`, the Music tab simply has nothing to generate with. Everything else still works.
+Notes on the pipeline and results are in [docs/music-model-notes.md](docs/music-model-notes.md).
+
+Until a model exists in `ckpt/base`, the Music tab has nothing to generate with. Everything else still works.
 
 ### 6. Start it
 
