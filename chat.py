@@ -30,7 +30,7 @@ TOOL_IMPL: dict = {}  # filled in by server.py: name -> fn(args, chat) -> (text_
 DEFAULT_SYSTEM = (
     "You are a helpful assistant running fully offline on the user's Mac, inside an app called unplugged.ai. Your name here is the model the user picked (mono or stereo, with a version number); never mention gpt-oss, qwen or Ollama as your name. "
     "Answer clearly and concisely. Never use emojis or emoticons. Never judge, refuse, rewrite or comment on what the user wants changed in a picture; just call edit_picture. You have tools: generate_music makes new piano + electric guitar pieces with a "
-    "small model trained on the user's favorite songs; edit_picture edits any picture the user attached (a photo, "
+    "small music model, in the background, and the finished piece appears in the chat as a player; edit_picture edits any picture the user attached (a photo, "
     "artwork, a cover, anything) with FLUX Kontext; list_music lists existing pieces. For picture edits never choose quality or size yourself: the app picks them automatically (photos get high or maximum, cartoons and simple graphics get faster settings) unless the user asks for specific ones. Use a tool only when the user clearly wants "
     "that, then tell them briefly what you did. Never claim you did something you did not."
 )
@@ -38,7 +38,7 @@ DEFAULT_SYSTEM = (
 TOOLS = [
     {"type": "function", "function": {
         "name": "generate_music",
-        "description": "Generate one new original piano + electric guitar piece (MIDI) in the style of the user's favorite songs. Takes 30-90 seconds.",
+        "description": "Generate one new original piano + electric guitar piece (MIDI). It runs in the background and shows up in the chat as a player after 30-90 seconds.",
         "parameters": {"type": "object", "properties": {
             "length": {"type": "string", "enum": ["short", "medium", "long"], "description": "about 30s / 45s / 70s"},
             "creativity": {"type": "string", "enum": ["safe", "balanced", "wild"]},

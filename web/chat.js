@@ -201,14 +201,86 @@
     const b = d.querySelector('.b');
     if (running) { b.textContent = args && Object.keys(args).length ? JSON.stringify(args) : ''; return d; }
     if (card && card.kind === 'music') {
-      b.innerHTML = `${card.info.duration}s · ${card.info.piano} piano notes · ${card.info.guitar} guitar notes<br><button>Open in Music tab</button>`;
-      b.querySelector('button').onclick = async () => { showTab('music'); await loadLibrary(card.id); };
+      musicPlayer(b, card.id, card.info);
+    } else if (card && card.kind === 'music_job') {
+      b.textContent = 'Starting…'; pollMusic(card.job, b);
     } else if (card && card.kind === 'image_job') {
       b.textContent = 'Starting…'; pollImage(card.job, b);
     } else b.textContent = (text || '').slice(0, 300);
     return d;
   }
   const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+  // ---------- music inside the chat: live progress, then a player with piano roll and downloads
+  async function pollMusic(job, b) {
+    b.innerHTML = '<div class="ijtxt">Starting the music model…</div><div class="pbar" style="display:block"><i class="ijfill"></i></div>';
+    const txt = b.querySelector('.ijtxt'), fill = b.querySelector('.ijfill'); let fake = 4;
+    for (;;) {
+      let j; try { j = await J('/api/job?id=' + job); } catch (e) { txt.textContent = 'Lost track of this job.'; return; }
+      if (j.message === 'unknown job') { txt.textContent = 'This piece was interrupted by a server restart. Check the Music tab, or ask again.'; b.querySelector('.pbar').remove(); return; }
+      if (j.status === 'running' || j.status === 'queued') {
+        const el = Date.now() / 1000 - (j.started || Date.now() / 1000);
+        fake = Math.min(92, fake + (92 - fake) * 0.06); fill.style.width = fake.toFixed(1) + '%';
+        txt.textContent = (j.message || 'Composing…') + ` · ${mmss(el)}`;
+        await new Promise(r => setTimeout(r, 1200)); continue;
+      }
+      if (j.status === 'done' && j.results && j.results.length) {
+        try { const sid = j.results[0]; const n = await J('/api/notes?id=' + encodeURIComponent(sid)); b.innerHTML = ''; musicPlayer(b, sid, { duration: n.duration, piano: (n.tracks.find(t => t.name === 'piano') || { notes: [] }).notes.length, guitar: (n.tracks.find(t => t.name === 'guitar') || { notes: [] }).notes.length }); }
+        catch (e) { txt.textContent = 'Done. Open the Music tab to play it.'; }
+        return;
+      }
+      txt.textContent = j.message || 'No usable piece came out. Ask again.'; b.querySelector('.pbar')?.remove(); return;
+    }
+  }
+  const midiPlayers = new Set();
+  let audioCtx = null;
+  function musicPlayer(b, id, info) {
+    const q = '/midi?id=' + encodeURIComponent(id);
+    b.innerHTML = `<div class="mp"><canvas class="mproll"></canvas>
+      <div class="mprow"><button class="mpplay">${ico('play')} Play</button><span class="mptime">0:00 / ${mmss(info.duration || 0)}</span>
+      <span class="mpmeta">${info.piano} piano · ${info.guitar} guitar notes</span></div>
+      <div class="mpdl"><a href="${q}&part=both" download>${ico('download')} Both (.mid)</a><a href="${q}&part=piano" download>${ico('download')} Piano</a><a href="${q}&part=guitar" download>${ico('download')} Guitar</a><button class="mpopen">Open in Music tab</button></div></div>`;
+    const cv = b.querySelector('.mproll'), btn = b.querySelector('.mpplay'), tm = b.querySelector('.mptime');
+    let data = null, playing = false, t0 = 0, offset = 0, nodes = [], raf = 0;
+    const colors = { piano: '#6ea0ff', guitar: '#f0a06e' };
+    const pos = () => playing ? Math.min(data.duration, offset + audioCtx.currentTime - t0) : offset;
+    function draw() {
+      if (!data) return; const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+      cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+      const all = data.tracks.flatMap(t => t.notes); if (!all.length) return;
+      const lo = Math.min(...all.map(n => n[2])) - 2, hi = Math.max(...all.map(n => n[2])) + 2, dur = data.duration;
+      for (const t of data.tracks) { g.globalAlpha = .9; g.fillStyle = colors[t.name] || '#888'; for (const [s, d, p] of t.notes) g.fillRect(s / dur * w, h - (p - lo + 1) / (hi - lo + 1) * h, Math.max(2, d / dur * w), Math.max(2, h / (hi - lo + 1) - 1)); }
+      g.globalAlpha = 1; const x = pos() / dur * w; g.fillStyle = '#fff'; g.fillRect(x, 0, 2, h);
+      tm.textContent = `${mmss(pos())} / ${mmss(dur)}`;
+    }
+    function stop(keep) { if (!keep && playing) offset = pos(); playing = false; cancelAnimationFrame(raf); nodes.forEach(n => { try { n.stop ? n.stop() : n.disconnect(); } catch (e) {} }); nodes = []; btn.innerHTML = ico('play') + ' Play'; draw(); }
+    function tick() { if (!playing) return; draw(); if (pos() >= data.duration) { stop(true); offset = 0; draw(); return; } raf = requestAnimationFrame(tick); }
+    function play() {
+      midiPlayers.forEach(p => p !== api && p.stop());
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); stop(true);
+      playing = true; t0 = audioCtx.currentTime + 0.05;
+      const master = audioCtx.createGain(); master.gain.value = 0.35; const comp = audioCtx.createDynamicsCompressor(); master.connect(comp); comp.connect(audioCtx.destination); nodes = [master];
+      for (const t of data.tracks) {
+        const bus = audioCtx.createGain(); bus.gain.value = t.name === 'guitar' ? 0.5 : 0.8;
+        if (t.name === 'guitar') { const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; bus.connect(lp); lp.connect(master); } else bus.connect(master);
+        for (const [s, d, p, v] of t.notes) {
+          if (s + d < offset) continue;
+          const when = t0 + Math.max(0, s - offset), len = Math.max(0.08, d - Math.max(0, offset - s)), vel = (v / 127) * 0.6 + 0.1;
+          const o = audioCtx.createOscillator(), e = audioCtx.createGain(); o.frequency.value = 440 * Math.pow(2, (p - 69) / 12);
+          o.type = t.name === 'piano' ? 'triangle' : 'sawtooth';
+          e.gain.setValueAtTime(0.0001, when); e.gain.exponentialRampToValueAtTime(vel, when + 0.01); e.gain.exponentialRampToValueAtTime(0.0001, when + len + 0.25);
+          o.connect(e); e.connect(bus); o.start(when); o.stop(when + len + 0.3); nodes.push(o);
+        }
+        nodes.push(bus);
+      }
+      btn.innerHTML = ico('pause') + ' Pause'; tick();
+    }
+    const api = { stop: () => { if (playing) stop(); } }; midiPlayers.add(api);
+    btn.onclick = async () => { if (!data) data = await J('/api/notes?id=' + encodeURIComponent(id)); playing ? stop() : play(); };
+    cv.onclick = async e => { if (!data) data = await J('/api/notes?id=' + encodeURIComponent(id)); const r = cv.getBoundingClientRect(); offset = (e.clientX - r.left) / r.width * data.duration; if (playing) play(); else draw(); };
+    b.querySelector('.mpopen').onclick = async () => { showTab('music'); await loadLibrary(id); };
+    J('/api/notes?id=' + encodeURIComponent(id)).then(d => { data = d; draw(); }).catch(() => {});
+  }
   async function pollImage(job, b) {
     b.innerHTML = `<div class="ijtxt">Starting the image model…</div><div class="pbar" style="display:block"><i class="ijfill"></i></div>
       <img class="ijprev" style="display:none"><div class="ijacts"><button class="ijcancel">Cancel</button></div>`;

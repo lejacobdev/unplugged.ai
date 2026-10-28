@@ -403,3 +403,14 @@ input[type=checkbox]:not(.switch):active { transform: scale(.9); }
 progress, .bar > i, .progress > i { transition: width .4s ease; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; } }
+
+/* music player inside a chat message */
+.mp { display: flex; flex-direction: column; gap: 10px; }
+.mproll { width: 100%; height: 120px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); cursor: pointer; display: block; }
+.mprow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mptime { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.mpmeta { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+.mpdl { display: flex; gap: 8px; flex-wrap: wrap; }
+.mpdl a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 10px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 13px; transition: background-color .15s; }
+.mpdl a:hover { background: var(--hover); }
+.mp .i { width: 16px; height: 16px; }

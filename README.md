@@ -20,7 +20,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothin
 | | |
 |---|---|
 | **Chat** | A chatbot interface with two models: **stereo 2** (the stronger reasoning model, `gpt-oss:20b`) and **mono 2** (the lighter model, `qwen3:14b`). Both are the original Ollama models under app names; fine-tuned versions are planned and not available yet. Reasoning effort switch, tool calling, markdown, chat history, incognito chats. |
-| **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Piano roll, in-browser preview, MIDI download. |
+| **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Ask for a piece in the chat and it appears there as a player with a piano roll, preview and MIDI downloads (both chat models can do this); the Music tab has more controls. |
 | **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
 | **Console** | A live log of everything the models are doing. |
 | **Accounts** | Per-user history and settings, guest mode that deletes everything when you leave, incognito chats. |

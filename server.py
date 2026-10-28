@@ -181,14 +181,11 @@ def tool_generate_music(args, chat_obj, owner):
         cont = None
     p = {"owner": owner, "ephemeral": bool(chat_obj.get("incognito")), "count": 1, "tokens": tokens, "temp": temp, "top_p": 0.95, "rep": rep, "need_both": True, "prompt_tokens": 64, "continue_id": cont}
     jid = uuid.uuid4().hex[:8]
-    jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "", "results": [], "count": 1}
-    run_job(jid, p)
-    job = jobs[jid]
-    if not job["results"]:
-        return "Generation produced no usable piece: " + job["message"], None
-    sid = job["results"][0]
-    info = describe(resolve(sid, owner))
-    return f"Created music piece {sid}: {info['duration']}s, {info['piano']} piano notes, {info['guitar']} guitar notes. The user can play it in the Music tab.", {"kind": "music", "id": sid, "info": info}
+    jobs[jid] = {"status": "running", "owner": owner["uid"], "message": "Starting the music model…", "results": [], "count": 1, "started": time.time()}
+    # runs in the background: the chat shows a live card with the finished player, and the model can keep talking
+    threading.Thread(target=run_job, args=(jid, p), daemon=True).start()
+    return ("Started composing one new piece. It appears in this chat as a player with a piano roll when it is ready (about 30 to 90 seconds). "
+            "Tell the user briefly that it is being made. Do not describe the music yet, you have not heard it."), {"kind": "music_job", "job": jid}
 
 
 def tool_edit_picture(args, chat_obj, owner):
