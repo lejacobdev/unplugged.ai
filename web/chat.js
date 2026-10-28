@@ -188,9 +188,9 @@
   }
   function newChat(incognito) { if (streaming) return; leaveIncognito(); cur = { id: null, messages: [], title: incognito === true ? 'Incognito chat' : 'New chat', incognito: incognito === true }; attached = null; renderAttach(); showTab('chat'); render(); renderList(); el('input').focus(); }
   el('newchat').onclick = () => newChat(false);
-  el('incog').onclick = () => newChat(true);
+  el('incog').onclick = () => newChat(!(cur && cur.incognito));
   function leaveIncognito() { if (cur && cur.incognito) fetch('/api/chat/end-incognito', { method: 'POST' }).catch(() => {}); }
-  const setTitle = () => { el('ttl').innerHTML = (cur.incognito ? ico('incognito') + ' ' : '') + esc(cur.title || 'New chat'); el('tab-chat').classList.toggle('incognito', !!cur.incognito); };
+  const setTitle = () => { el('ttl').innerHTML = (cur.incognito ? ico('incognito') + ' ' : '') + esc(cur.title || 'New chat'); el('tab-chat').classList.toggle('incognito', !!cur.incognito); el('incog').classList.toggle('on', !!cur.incognito); el('incog').setAttribute('aria-pressed', !!cur.incognito); };
 
   // ---------- rendering
   // Follow the stream only while the reader is at the bottom; scrolling up stops it, and the arrow button brings them back.

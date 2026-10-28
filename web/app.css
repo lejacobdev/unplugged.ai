@@ -627,3 +627,9 @@ pre.lyr { white-space: pre-wrap; font: inherit; font-size: 13.5px; color: var(--
 .memrow button:hover { background: var(--hover); color: var(--ink); }
 .memrow .i { width: 15px; height: 15px; }
 .tobottom:not(:disabled):active { transform: scale(.94); }
+
+/* incognito toggle in the chat header, top right like ChatGPT's temporary chat */
+.chead .incog { margin-left: auto; border: none; background: none; color: var(--muted); width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; cursor: pointer; padding: 0; flex: none; }
+.chead .incog:hover { background: var(--hover); color: var(--ink); }
+.chead .incog.on { background: var(--hover); color: var(--ink); }
+.chead .incog .i { width: 19px; height: 19px; }
