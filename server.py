@@ -133,9 +133,9 @@ def tool_edit_picture(args, chat_obj, owner):
         card = m.get("card") or {}
         if card.get("kind") == "image_job":
             made = f"{card['job']}_0.png"
-            if (imgedit.DIR / made).exists():
+            if (imgedit.DIR / made).exists():   # a job lost to a restart has no file: keep looking further back
                 name = made
-            break
+                break
         if m.get("images"):
             break
     if not name:
@@ -483,6 +483,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, imgedit.status())
             if u.path == "/api/img/history":
                 return self.send(200, imgedit.history(o))
+            if u.path == "/api/img/gen-status":
+                return self.send(200, imgedit.gen_status())
             if u.path == "/api/img/job":
                 j = imgedit.job_for(o, q.get("id"))
                 return self.send(200, {k: v for k, v in j.items() if k != "owner"} if j else {"status": "error", "message": "unknown job"})
@@ -521,6 +523,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 auth.settings_put(o, self.body_json())
                 return self.send(200, {"ok": True})
+            except Exception as e:
+                return self.send(400, {"error": str(e)})
+        if path == "/api/img/generate":
+            try:
+                body = self.body_json()
+                body["owner"] = o
+                return self.send(200, {"job": imgedit.start_generate(body)})
             except Exception as e:
                 return self.send(400, {"error": str(e)})
         if path == "/api/img/edit":

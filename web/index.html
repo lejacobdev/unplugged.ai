@@ -245,6 +245,16 @@
 </main>
 
 <main id="tab-cover" style="display:none">
+  <section class="card" id="gencard">
+    <h2>Create a picture</h2>
+    <div class="notice" id="gsetup" style="display:none"><b>Setup needed.</b> Run <code>./setup_extras.sh image</code> in the project folder, then restart the server.</div>
+    <label>Describe the picture
+      <textarea id="gprompt" rows="3" placeholder="A small log cabin in a snowy pine forest next to a ski slope, soft morning light"></textarea></label>
+    <label>Shape <select id="gaspect"><option value="square">Square (1024 x 1024)</option><option value="landscape">Landscape (1344 x 768)</option><option value="portrait">Portrait (768 x 1344)</option></select></label>
+    <div class="row"><button class="primary" id="ggo" type="button">Create picture</button><button type="button" id="gcancel" style="display:none">Cancel</button></div>
+    <div class="status" id="gstat"></div>
+    <div class="grid" id="gout"></div>
+  </section>
   <section class="card">
     <h2>Edit a picture</h2>
     <div class="notice" id="isetup" style="display:none">
@@ -632,6 +642,30 @@ $('lorafile').onchange = () => {
 };
 loadLoras();
 let jobId = null;
+// ---- create a picture from text
+let gJob = null;
+api('/api/img/gen-status').then(s => { $('gsetup').style.display = s.ready ? 'none' : 'block'; }).catch(() => {});
+$('gcancel').onclick = () => { if (gJob) fetch('/api/img/cancel?id=' + gJob, { method: 'POST' }); };
+$('ggo').onclick = async () => {
+  const prompt = $('gprompt').value.trim(); if (!prompt || gJob) return;
+  $('ggo').disabled = true; $('gcancel').style.display = ''; $('gstat').textContent = 'Starting…';
+  try {
+    const { job } = await api('/api/img/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, aspect: $('gaspect').value }) });
+    gJob = job;
+    for (;;) {
+      const j = await api('/api/img/job?id=' + job), el = Math.round(Date.now() / 1000 - j.started);
+      if (j.status === 'queued' || j.status === 'running') { $('gstat').textContent = (j.step ? 'Creating… step ' + j.step + ' of ' + j.steps : 'Loading the model…') + ' · ' + el + ' s'; await new Promise(r => setTimeout(r, 1500)); continue; }
+      if (j.status === 'done') {
+        $('gstat').textContent = 'Done in ' + el + ' s.';
+        const f = j.results[0], d = document.createElement('div'); d.className = 'hitem';
+        d.innerHTML = '<img src="/img/' + f + '"><div class="acts"><a href="/img/' + f + '?download=1" download="' + f + '"><button type="button">Download</button></a></div>';
+        $('gout').prepend(d);
+      } else $('gstat').textContent = j.status === 'cancelled' ? 'Cancelled.' : (j.message || j.status);
+      break;
+    }
+  } catch (e) { $('gstat').textContent = e.message; }
+  gJob = null; $('ggo').disabled = false; $('gcancel').style.display = 'none';
+};
 $('icancel').onclick = async () => { if (jobId) await fetch('/api/img/cancel?id=' + jobId, { method: 'POST' }); };
 async function followImg(job, resumed) {
   jobId = job; setJob('img', job);

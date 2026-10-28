@@ -301,7 +301,7 @@ def history(owner):
         except Exception:
             pass
     for jid, j in jobs.items():  # guest / incognito edits are never written to disk history
-        if j.get("ephemeral") and j.get("owner") == owner["uid"] and j.get("status") == "done":
+        if j.get("ephemeral") and j.get("owner") == owner["uid"] and j.get("status") == "done" and j.get("kind") != "generate":
             m = {k: j[k] for k in ("prompt", "full_prompt", "steps", "seeds", "results", "input", "size", "created")}
             m["id"] = jid
             out.append(m)
