@@ -603,3 +603,7 @@ pre.lyr { white-space: pre-wrap; font: inherit; font-size: 13.5px; color: var(--
 .tk-t { color: #f07178; }
 .tk-a { color: #ffcb6b; }
 .tk-p { color: #89a1b4; }
+.hist h4 { display: flex; align-items: center; justify-content: space-between; }
+.hist h4 .hnew { border: none; background: none; color: var(--muted); width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; padding: 0; margin: -4px 0; }
+.hist h4 .hnew:hover { background: var(--hover); color: var(--ink); }
+.hist h4 .hnew .i { width: 16px; height: 16px; }

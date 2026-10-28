@@ -151,7 +151,8 @@
     const h = el('hist'); h.innerHTML = '';
     for (const [name, list] of Object.entries(groups)) {
       if (!list.length) continue;
-      h.insertAdjacentHTML('beforeend', `<h4>${name}</h4>`);
+      h.insertAdjacentHTML('beforeend', `<h4><span>${name}</span>${h.children.length ? '' : `<button type="button" class="hnew" title="New chat">${ico('compose')}</button>`}</h4>`);
+      h.querySelector('.hnew') && (h.querySelector('.hnew').onclick = e => { e.stopPropagation(); newChat(false); });
       for (const c of list) {
         const r = document.createElement('div'); r.className = 'row' + (cur.id === c.id ? ' on' : '');
         r.innerHTML = `<span title="${esc(c.title)}">${esc(c.title)}</span><button data-a="r" title="Rename">${ico('pencil')}</button><button data-a="d" title="Delete">${ico('x')}</button>`;
