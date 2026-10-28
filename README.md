@@ -122,7 +122,7 @@ The repository still contains the earlier experiment (a small GPT trained on MID
 
 Open **http://127.0.0.1:8000** (or http://localhost:8000). Create an account (the first thing you see is the sign-in page) or continue as a guest.
 
-To have it start by itself at login and restart if it stops, run `./setup_autostart.sh` once (`./setup_autostart.sh remove` undoes it). Without that, the app only runs while `./start.sh` is running in a terminal; if that stops, the address shows "not found".
+To have it start by itself at login and restart within seconds if it stops, run `./setup_autostart.sh` once (`./setup_autostart.sh remove` undoes it). It then runs in the background from the folder you ran it in (so keep the project in a permanent place, not a temporary one), logs to `logs/server.out`, and needs no terminal and no other program. It starts when you log in, not before: with automatic login switched on that is as soon as the Mac has started. Without that, the app only runs while `./start.sh` is running in a terminal; if that stops, the address shows "not found".
 
 On the Mac itself nothing needs the internet or Wi-Fi: the page, the chat models and the draft writing were tested with all non-local network connections blocked. Music and picture generation were **not** tested that way. The `.local` and LAN addresses printed for the phone do need a network.
 
