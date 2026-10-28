@@ -1,7 +1,7 @@
 // JacobAI service worker: opens the app instantly, keeps the shell + your recent chats available offline.
 // The AI itself runs on the Mac, so sending messages, making music or editing pictures needs the Mac to be reachable.
 const V = 'jacobai-v1';
-const SHELL = ['/static/app.css', '/static/chat.js', '/static/store.js', '/static/ui.js', '/offline.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/favicon.png'];
+const SHELL = ['/static/app.css', '/static/chat.js', '/static/store.js', '/static/ui.js', '/static/hl.js', '/offline.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/favicon.png'];
 const PRIVATE = ['jacobai-pages', 'jacobai-data', 'jacobai-img'];  // cleared on sign-out
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });

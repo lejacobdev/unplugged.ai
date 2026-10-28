@@ -92,7 +92,7 @@
   }
   function md(src) {
     return src.split('```').map((p, i) => {
-      if (i % 2) { const nl = p.indexOf('\n'); const lang = (nl < 0 ? '' : p.slice(0, nl)).trim().replace(/[^\w+#.-]/g, ''); const code = (nl < 0 ? '' : p.slice(nl + 1)).replace(/\n$/, ''); return `<div class="codeblk"><div class="codehead"><span>${esc(lang || 'text')}</span><button type="button" class="cp">${ico('copy')}<span>Copy</span></button></div><pre><code>${esc(code)}</code></pre></div>`; }
+      if (i % 2) { const nl = p.indexOf('\n'); const lang = (nl < 0 ? '' : p.slice(0, nl)).trim().replace(/[^\w+#.-]/g, ''); const code = (nl < 0 ? '' : p.slice(nl + 1)).replace(/\n$/, ''); return `<div class="codeblk"><div class="codehead"><span>${esc(lang || 'text')}</span><button type="button" class="cp">${ico('copy')}<span>Copy</span></button></div><pre${/^(text|txt|plain|plaintext|markdown|md)?$/i.test(lang) ? ' class="wrap"' : ''}><code>${window.hl ? hl(code, lang) : esc(code)}</code></pre></div>`; }
       return blocks(p);
     }).join('');
   }

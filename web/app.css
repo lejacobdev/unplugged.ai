@@ -594,3 +594,12 @@ pre.lyr { white-space: pre-wrap; font: inherit; font-size: 13.5px; color: var(--
 .askdlg .askrow button { width: auto; flex: none; margin: 0; height: 38px; padding: 0 18px; line-height: 1; box-shadow: none; }
 .askdlg .askrow button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .askdlg .askrow button:focus:not(:focus-visible) { outline: none; }
+.bubble .codeblk pre.wrap { white-space: pre-wrap; word-break: break-word; overflow-x: hidden; }
+.tk-c { color: #7f8c98; font-style: italic; }
+.tk-s { color: #a5d6a7; }
+.tk-n { color: #f2a86b; }
+.tk-k { color: #c792ea; }
+.tk-f { color: #82aaff; }
+.tk-t { color: #f07178; }
+.tk-a { color: #ffcb6b; }
+.tk-p { color: #89a1b4; }
