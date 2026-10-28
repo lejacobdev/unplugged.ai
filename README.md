@@ -3,13 +3,13 @@
 <p align="center">
 <b>Your own private AI that runs entirely on your Mac.</b><br>
 Chat with a local language model, write piano + electric guitar music with a model you train yourself,<br>
-and edit pictures with FLUX Kontext. Open it from your iPhone as an app. Nothing ever leaves your computer.
+and edit pictures with FLUX Kontext. Open it from your iPhone over Wi-Fi. Nothing ever leaves your computer.
 </p>
 
 <p align="center">
 <img alt="runs offline" src="https://img.shields.io/badge/runs-100%25%20offline-2ea44f">
 <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-lightgrey">
-<img alt="pwa" src="https://img.shields.io/badge/iPhone-installable%20PWA-blue">
+<img alt="pwa" src="https://img.shields.io/badge/iPhone-web%20app%20(untested%20on%20device)-blue">
 <img alt="license" src="https://img.shields.io/badge/license-MIT-orange">
 </p>
 
@@ -19,12 +19,12 @@ and edit pictures with FLUX Kontext. Open it from your iPhone as an app. Nothing
 
 | | |
 |---|---|
-| **Chat** | A chatbot interface on our own fine-tuned models: **stereo 2** (stronger reasoning, based on `gpt-oss:20b`) and **mono 2** (quicker and simpler, based on `qwen3:14b`). |
+| **Chat** | A chatbot interface with two models: **stereo 2** (the stronger reasoning model, `gpt-oss:20b`) and **mono 2** (the lighter model, `qwen3:14b`). Both are the original Ollama models under app names; fine-tuned versions are planned and not available yet. Reasoning effort switch, tool calling, markdown, chat history, incognito chats. |
 | **Music** | A 35M-parameter GPT you train on MIDI. It writes piano and clean/driven electric guitar together trained on a broad mix of piano and guitar music. Piano roll, in-browser preview, MIDI download. |
 | **Pictures** | FLUX.1 Kontext [dev] picture editing with live preview, automatic quality choice, LoRA support, before/after slider. Drop a picture into the chat, say what to change, done. |
 | **Console** | A live log of everything the models are doing. |
 | **Accounts** | Per-user history and settings, guest mode that deletes everything when you leave, incognito chats. |
-| **iPhone app** | Installable PWA with offline shell. Your Mac does the computing, the phone is the screen. |
+| **iPhone** | Use it from the phone's browser; the Mac does the computing. Home-screen install and the offline shell are built but **not yet tested on a real iPhone**. |
 
 <p align="center">
 <img src="docs/img/desktop-chat.png" width="49%" alt="Chat">
@@ -46,7 +46,7 @@ and edit pictures with FLUX Kontext. Open it from your iPhone as an app. Nothing
 
 ## Requirements
 
-* A Mac with **Apple Silicon**. Developed on an M5 Pro with 24 GB. 16 GB works for chat with `mono`; picture editing and `stereo` want 24 GB or more.
+* A Mac with **Apple Silicon**. Developed and tested only on an M5 Pro with 24 GB. Other configurations are untested.
 * macOS, **Homebrew**, **Python 3.11** and **Python 3.12**, **Ollama**, **git**.
 * About **80 GB** of free disk: models (~25 GB), picture model download + 8-bit copy (~50 GB while converting), music training data (~2 GB).
 * A free Hugging Face account (to accept the FLUX.1 Kontext license). The FLUX license is **non-commercial**.
@@ -129,6 +129,8 @@ Open **http://127.0.0.1:8000**. Create an account (the first thing you see is th
 ---
 
 ## Use it from your iPhone
+
+> Status: the page is reachable from a phone on the same network (tested). The HTTPS certificate steps, Add to Home Screen and the offline shell are implemented but have **not been tested on a real iPhone yet**; expect to debug.
 
 Your Mac does all the work; the phone is just a window. Both must be on the same Wi-Fi (or on the same VPN, for example [Tailscale](https://tailscale.com), if you want it away from home).
 
