@@ -374,7 +374,7 @@
     el('tab-chat').classList.toggle('is-empty', !cur.messages.length);
     setTitle(); const inner = el('inner'); inner.innerHTML = '';
     if (!cur.messages.length) {
-      inner.innerHTML = `<div class="empty-chat"><img class="logo-big" src="/icons/icon-192.png" alt="" width="56" height="56"><h2>${cur.incognito ? 'Incognito chat' : `What can I help with${ME.kind === 'user' ? ', ' + esc(ME.name) : ''}?`}</h2><div>${cur.incognito ? 'This chat is not saved and disappears when you leave it. ' : ''}Everything here runs offline on your Mac, using ${esc(modelLabels[settings.model] || settings.model)}.</div>
+      inner.innerHTML = `<div class="empty-chat"><img class="logo-big" src="/icons/icon-192.png" alt="" width="56" height="56"><h2>${cur.incognito ? 'Incognito chat' : `What can I help you with${((PF.name || '').trim() || (ME.kind === 'user' ? ME.name : '')) ? ', ' + esc((PF.name || '').trim() || ME.name) : ''}?`}</h2><div>${cur.incognito ? 'This chat is not saved and disappears when you leave it. ' : ''}Everything here runs offline on your Mac, using ${esc(modelLabels[settings.model] || settings.model)}.</div>
         <div class="chips"><button>Make me a new piano and guitar piece</button><button>Help me write something</button><button>Explain something to me simply</button><button>Explain how my music model was trained</button></div></div>`;
       inner.querySelectorAll('.chips button').forEach(b => b.onclick = () => { el('input').value = b.textContent; send(); });
       return;

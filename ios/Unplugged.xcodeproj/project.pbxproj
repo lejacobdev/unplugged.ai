@@ -25,6 +25,7 @@
 		90B16AA5500087ED0C63BC78 /* LibraryConsoleViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD073918EE926D7F37223177 /* LibraryConsoleViews.swift */; };
 		955BB3358D42DF3821705822 /* Tunnel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CD8ECE304519F4742944E38 /* Tunnel.swift */; };
 		95C3261D5870225E1BBC7B1E /* ServersPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB276002B0E1C94DC89F7099 /* ServersPane.swift */; };
+		96D2B1C692D6FF738A7509B7 /* Notify.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9822AD332BB971381FFD858D /* Notify.swift */; };
 		9C351A6F707BA63C265E8687 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 357747840ABC18BCAF11B29D /* SignInView.swift */; };
 		A44F0152D304EF003ADA343B /* Server.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8E163DAB15673FCE8353CCA /* Server.swift */; };
 		AE158A097E61646138521353 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A3EF727B86A002183AE20729 /* Assets.xcassets */; };
@@ -88,6 +89,7 @@
 		830EF1F40FAF0FF07FE09A4A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		83492570AF0255AE59F1450C /* API+More.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "API+More.swift"; sourceTree = "<group>"; };
 		8DD31DD35EAAC790A30D2FE6 /* MusicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicView.swift; sourceTree = "<group>"; };
+		9822AD332BB971381FFD858D /* Notify.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notify.swift; sourceTree = "<group>"; };
 		9E5248F4B5C3C36173D59B11 /* WatchProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchProtocol.swift; sourceTree = "<group>"; };
 		A236104FB87EB5B9E4981FB8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A35EE1D71ACB9C94BE5AD3D7 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				FFAE3062927664D865D6F7AD /* AppModel.swift */,
 				CC870356F035FFE1F923C69B /* Audio.swift */,
 				D3030707F3626A698035F29E /* Discovery.swift */,
+				9822AD332BB971381FFD858D /* Notify.swift */,
 				4F5CB6AD104F3AB1150249B4 /* PhoneSession.swift */,
 				E8E163DAB15673FCE8353CCA /* Server.swift */,
 				6A7F9268040121CB52A9FDE8 /* Theme.swift */,
@@ -342,6 +345,7 @@
 				90B16AA5500087ED0C63BC78 /* LibraryConsoleViews.swift in Sources */,
 				C8DC693279347DF38D9B1319 /* MessageViews.swift in Sources */,
 				B2DD908D2A0B02BC32DA8820 /* MusicView.swift in Sources */,
+				96D2B1C692D6FF738A7509B7 /* Notify.swift in Sources */,
 				E466981E4A9F4EE1BA450658 /* OnboardingView.swift in Sources */,
 				86D9B386AD3BD100B15F1C3A /* PhoneSession.swift in Sources */,
 				BDEFCBA8BABB7591AEF10BF7 /* PicturesView.swift in Sources */,
@@ -456,7 +460,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = Y6QW849HK2;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -535,7 +539,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = Y6QW849HK2;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

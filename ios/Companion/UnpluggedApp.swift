@@ -1,4 +1,5 @@
 import SwiftUI
+import UserNotifications
 
 @main
 struct UnpluggedApp: App {
@@ -17,6 +18,7 @@ struct UnpluggedApp: App {
         Self.applyDebugArguments()
         #endif
         PhoneSession.shared.activate()
+        UNUserNotificationCenter.current().delegate = NotifyDelegate.shared
     }
 
     #if DEBUG

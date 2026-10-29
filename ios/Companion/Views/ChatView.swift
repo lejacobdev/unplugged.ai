@@ -79,9 +79,17 @@ struct ChatView: View {
         .sheet(item: Binding(get: { exportURL.map { DownloadItem(url: $0) } }, set: { exportURL = $0?.url })) { ShareSheet(items: [$0.url]) }
     }
 
+    /// "What can I help you with, Jacob?": the name from Personalization, otherwise the account name.
+    private var greeting: String {
+        let name = app.pName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? app.userName : app.pName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "What can I help you with?" : "What can I help you with, \(name)?"
+    }
+
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Text(app.chatIncognito ? "Incognito chat" : "What can I help with?").font(.system(size: 24, weight: .semibold)).foregroundStyle(UP.ink)
+            Image("Logo").resizable().frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 14)).padding(.bottom, 6)
+            Text(app.chatIncognito ? "Incognito chat" : greeting).font(.system(size: 24, weight: .semibold)).foregroundStyle(UP.ink)
+                .multilineTextAlignment(.center).padding(.horizontal, 20)
             if app.chatIncognito {
                 Text("Not saved, not remembered, gone when you leave it.").font(.subheadline).foregroundStyle(UP.muted)
             } else if let p = app.projectName(app.activeProject) {
@@ -259,8 +267,11 @@ struct ChatView: View {
         error = nil
         Speaker.shared.stop()
         streaming = true
+        Notify.askOnce()
+        let bg = BackgroundTask.begin()
         let useModel = model ?? app.model
         streamTask = Task {
+            defer { BackgroundTask.end(bg) }
             do {
                 let id: String
                 if let existing = chatID { id = existing } else {
@@ -318,6 +329,7 @@ struct ChatView: View {
     private func finish() async {
         if let last = messages.last, last.role == "assistant", last.content.isEmpty, last.thinking.isEmpty { messages.removeLast() }
         guard let id = chatID, let api = app.api else { return }
+        if let m = messages.last(where: { $0.role == "assistant" }), error == nil { Notify.answer(m.content, chat: title) }
         await app.loadChats()
         if let c = try? await api.chat(id) { messages = c.messages; title = c.title }
         if app.autoRead, error == nil, let m = messages.last(where: { $0.role == "assistant" }), !m.content.isEmpty {
