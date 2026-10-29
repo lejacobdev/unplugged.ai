@@ -918,7 +918,7 @@ MODEL_SUGGEST = [
 CACHEABLE = {"/", "/api/chat/list", "/api/chat/get", "/api/img/history", "/api/samples"}
 CERT, KEY = ROOT / "certs/server.pem", ROOT / "certs/server.key"
 TLS = CERT.exists() and KEY.exists()
-HOSTNAME = (os.popen("scutil --get LocalHostName 2>/dev/null").read().strip() or socket.gethostname().split(".")[0])
+HOSTNAME = os.environ.get("JACOBAI_NAME") or (os.popen("scutil --get LocalHostName 2>/dev/null").read().strip() or socket.gethostname().split(".")[0])
 
 
 class TLSHandler(Handler):

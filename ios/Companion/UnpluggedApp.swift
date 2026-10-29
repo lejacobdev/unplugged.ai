@@ -32,6 +32,15 @@ struct UnpluggedApp: App {
             app.onboarded = true
             Task { await app.refresh() }
         }
+        if let nearby = value("-seed-nearby"), let token = value("-seed-token") {
+            var n = Server(name: "Nearby test", host: "127.0.0.1", port: 0, secure: false)
+            n.nearbyName = nearby
+            let s = ServerStore.shared.add(n)
+            Keychain.set(token, account: s.id.uuidString)
+            ServerStore.shared.activate(s)
+            app.onboarded = true
+            Task { await app.refresh() }
+        }
         if let sec = value("-section"), let s = AppModel.Section(rawValue: sec) { app.section = s }
         if let pane = value("-settings"), let p = SettingsPane(rawValue: pane) { app.openSettings(p) }
         if a.contains("-drawer") { app.drawerOpen = true }

@@ -13,6 +13,8 @@ final class Tunnel: @unchecked Sendable {
     private var listener: NWListener?
     private var service: String?
     private var localPort: UInt16 = 0
+    private var lastName: String?
+    private var lastRoute: (NWEndpoint, NWInterface?)?
 
     /// The local port for this Mac's service, when the proxy is running.
     func port(for name: String) -> Int? {
@@ -82,7 +84,14 @@ final class Tunnel: @unchecked Sendable {
         let direct = NWParameters.tcp
         direct.includePeerToPeer = true
         direct.prohibitedInterfaceTypes = [.wifi, .wiredEthernet, .cellular, .loopback]
-        let attempts = [NWConnection(to: endpoint, using: any), NWConnection(to: endpoint, using: direct)]
+        var attempts = [NWConnection(to: endpoint, using: any), NWConnection(to: endpoint, using: direct)]
+        // The address and link of the last connection that worked: reusing it skips the slow name lookup over the air.
+        if let (cachedEndpoint, cachedInterface) = lock.withLock({ () -> (NWEndpoint, NWInterface?)? in lastName == name ? lastRoute : nil }) {
+            let known = NWParameters.tcp
+            known.includePeerToPeer = true
+            if let cachedInterface { known.requiredInterface = cachedInterface }
+            attempts.insert(NWConnection(to: cachedEndpoint, using: known), at: 0)
+        }
         let winner = Once()
         var failed = 0
         for remote in attempts {
@@ -91,6 +100,10 @@ final class Tunnel: @unchecked Sendable {
                 case .ready:
                     winner.run {
                         for other in attempts where other !== remote { other.cancel() }
+                        if let ep = remote.currentPath?.remoteEndpoint {
+                            let iface = remote.currentPath?.availableInterfaces.first
+                            self?.lock.withLock { self?.lastName = name; self?.lastRoute = (ep, iface) }
+                        }
                         remote.stateUpdateHandler = { st in
                             switch st {
                             case .failed, .cancelled: local.cancel()
@@ -108,7 +121,7 @@ final class Tunnel: @unchecked Sendable {
                     }
                 case .failed:
                     failed += 1   // runs on the tunnel queue only
-                    if failed == attempts.count { local.cancel() }
+                    if failed == attempts.count { local.cancel(); self?.lock.withLock { self?.lastRoute = nil } }
                 default: break
                 }
             }
@@ -121,12 +134,14 @@ final class Tunnel: @unchecked Sendable {
         }
         local.start(queue: queue)
         attempts.forEach { $0.start(queue: queue) }
-        // Not connected to the Mac within 15 s (out of reach, or a stale link after the app was in the background):
-        // close everything so the request fails with an error instead of loading forever.
-        queue.asyncAfter(deadline: .now() + 15) {
+        // Not connected to the Mac within 20 s (out of reach, or a stale link after the app was in the background):
+        // close everything so the request fails with an error instead of loading forever. The first link over the air
+        // can take several seconds to come up.
+        queue.asyncAfter(deadline: .now() + 20) { [weak self] in
             if !attempts.contains(where: { $0.state == .ready }) {
                 attempts.forEach { $0.cancel() }
                 local.cancel()
+                self?.lock.withLock { self?.lastRoute = nil }
             }
         }
     }
