@@ -1,0 +1,99 @@
+name: Unplugged
+options:
+  bundleIdPrefix: dev.lejacob
+  deploymentTarget:
+    iOS: "26.0"
+    watchOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    DEVELOPMENT_TEAM: Y6QW849HK2
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+targets:
+  Unplugged:
+    type: application
+    platform: iOS
+    sources:
+      - Companion
+      - Shared
+    dependencies:
+      - target: UnpluggedWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lejacob.unplugged
+        PRODUCT_NAME: Unplugged
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: Companion/Info.plist
+    info:
+      path: Companion/Info.plist
+      properties:
+        CFBundleDisplayName: unplugged.ai
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSLocalNetworkUsageDescription: unplugged.ai looks for your Mac running unplugged.ai on this Wi-Fi network so you can connect to it without typing an address.
+        NSBonjourServices: [_unplugged._tcp, _unplugged-p2p._tcp]
+        NSMicrophoneUsageDescription: The microphone is used only while you hold dictation, to turn your speech into text on your own Mac.
+        NSCameraUsageDescription: The camera is used only when you choose to take a photo to attach in the full app.
+        NSPhotoLibraryAddUsageDescription: Pictures you choose to save are added to your photo library.
+        NSPhotoLibraryUsageDescription: Photos are used only when you choose a picture to attach in the full app.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+  UnpluggedWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - Watch
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lejacob.unplugged.watchkitapp
+        PRODUCT_NAME: UnpluggedWatch
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: Watch/Info.plist
+        SKIP_INSTALL: YES
+    info:
+      path: Watch/Info.plist
+      properties:
+        CFBundleDisplayName: unplugged.ai
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: dev.lejacob.unplugged
+        ITSAppUsesNonExemptEncryption: false
+  UnpluggedUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: Unplugged
+    settings:
+      base:
+        TEST_TARGET_NAME: Unplugged
+        PRODUCT_BUNDLE_IDENTIFIER: dev.lejacob.unplugged.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Unplugged:
+    build:
+      targets:
+        Unplugged: all
+    test:
+      targets:
+        - UnpluggedUITests
+    archive:
+      config: Release

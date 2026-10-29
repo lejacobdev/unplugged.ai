@@ -403,6 +403,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/v1/"):
             return self.v1()
+        if self.path.split("?")[0] == "/api/ping":   # no login: lets the companion app recognise an unplugged.ai server
+            return self.send(200, {"app": "unplugged.ai", "api": 1, "name": HOSTNAME, "port": PORT, "tls_port": TLS_PORT if TLS else None,
+                                   "accounts": auth.has_users(), "secure": isinstance(self.connection, ssl.SSLSocket)})
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         try:
@@ -869,10 +872,51 @@ HOSTNAME = (os.popen("scutil --get LocalHostName 2>/dev/null").read().strip() or
 
 class TLSHandler(Handler):
     tls = True
+
+
+class BridgeHandler(Handler):
+    """Connections from unplugged-bridge (an iPhone nearby without a shared network). They arrive from 127.0.0.1 but come
+    from another device, so they are treated as remote: sign-in required, no guest mode, no account creation."""
+    def is_local(self):
+        return False
+
+
+BRIDGE_PORT = int(os.environ.get("JACOBAI_BRIDGE_PORT", 8001))
 LAN = os.environ.get("JACOBAI_LAN", "1") == "1"  # also reachable from your phone on the same Wi-Fi (sign-in required)
+
+def advertise():
+    """Announces the server on the local network (Bonjour, _unplugged._tcp) so the companion app finds it. Uses macOS dns-sd."""
+    if not LAN or not Path("/usr/bin/dns-sd").exists():
+        return
+    import atexit
+    import subprocess
+    txt = ["app=unplugged.ai", "api=1"] + ([f"tls={TLS_PORT}"] if TLS else [])
+    p = subprocess.Popen(["/usr/bin/dns-sd", "-R", f"unplugged.ai on {HOSTNAME}", "_unplugged._tcp", "local", str(PORT), *txt],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    atexit.register(p.terminate)
+    start_bridge()
+
+
+def start_bridge():
+    """Peer-to-peer access for the companion app (no Wi-Fi network needed). Builds bin/unplugged-bridge from bridge/main.swift once."""
+    import atexit
+    import subprocess
+    exe, src = ROOT / "bin/unplugged-bridge", ROOT / "bridge/main.swift"
+    if not exe.exists() or (src.exists() and src.stat().st_mtime > exe.stat().st_mtime):
+        if not src.exists() or not Path("/usr/bin/swiftc").exists():
+            return
+        exe.parent.mkdir(exist_ok=True)
+        r = subprocess.run(["/usr/bin/swiftc", "-O", str(src), "-o", str(exe)], capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            logbus.log("system", "nearby bridge could not be built: " + r.stderr[-300:])
+            return
+    p = subprocess.Popen([str(exe), str(BRIDGE_PORT), f"unplugged.ai on {HOSTNAME}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    atexit.register(p.terminate)
+
 
 def serve():
     schedule.start()
+    advertise()
     host = "0.0.0.0" if LAN else "127.0.0.1"
     servers = [ThreadingHTTPServer((host, PORT), Handler)]
     msg = f"unplugged.ai running at http://127.0.0.1:{PORT}"
@@ -886,6 +930,11 @@ def serve():
         s.socket = ctx.wrap_socket(s.socket, server_side=True)
         servers.append(s)
         msg += f"  |  secure (for the iPhone app): https://{HOSTNAME}.local:{TLS_PORT}"
+    if LAN:
+        try:
+            servers.append(ThreadingHTTPServer(("127.0.0.1", BRIDGE_PORT), BridgeHandler))
+        except OSError as e:
+            logbus.log("system", f"nearby bridge port {BRIDGE_PORT} is busy: {e}")
     try:   # "localhost" resolves to ::1 first in some browsers; listen there too so it never says not found
         class V6Server(ThreadingHTTPServer):
             address_family = socket.AF_INET6
