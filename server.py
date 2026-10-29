@@ -6,6 +6,7 @@ Everything runs on this Mac; the server only listens on localhost.
 """
 import ipaddress
 import json
+import sys
 import os
 import urllib.error
 import urllib.request
@@ -936,12 +937,29 @@ CGNAT = ipaddress.ip_network("100.64.0.0/10")
 BRIDGE_PORT = int(os.environ.get("JACOBAI_BRIDGE_PORT", 8001))
 LAN = os.environ.get("JACOBAI_LAN", "1") == "1"  # also reachable from your phone on the same Wi-Fi (sign-in required)
 
+def clear_orphans():
+    """Removes announcements left behind by an earlier run that was killed (their parent is gone, so they point at a dead
+    server and would show up in the companion app as a Mac you cannot sign in to)."""
+    import subprocess
+    out = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[1] == "1" and (("dns-sd -R" in parts[2] and "_unplugged._tcp" in parts[2]) or "unplugged-bridge" in parts[2]):
+            try:
+                os.kill(int(parts[0]), 15)
+            except OSError:
+                pass
+
+
 def advertise():
     """Announces the server on the local network (Bonjour, _unplugged._tcp) so the companion app finds it. Uses macOS dns-sd."""
     if not LAN or not Path("/usr/bin/dns-sd").exists():
         return
     import atexit
+    import signal
     import subprocess
+    clear_orphans()
+    signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))   # so the announcements below are removed on a normal stop
     txt = ["app=unplugged.ai", "api=1"] + ([f"tls={TLS_PORT}"] if TLS else [])
     p = subprocess.Popen(["/usr/bin/dns-sd", "-R", f"unplugged.ai on {HOSTNAME}", "_unplugged._tcp", "local", str(PORT), *txt],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
