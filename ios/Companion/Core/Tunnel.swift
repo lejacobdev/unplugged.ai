@@ -72,33 +72,60 @@ final class Tunnel: @unchecked Sendable {
         }
     }
 
+    /// Connects one local request to the Mac. Two attempts race: one over any path (same Wi-Fi works too) and one over the
+    /// direct peer-to-peer link only, because a Wi-Fi that blocks devices from talking to each other (office, school,
+    /// hotel) would otherwise stall the first. Whichever is ready first carries the request; the other is closed.
     private func bridge(_ local: NWConnection, to name: String) {
-        let p = NWParameters.tcp
-        p.includePeerToPeer = true
-        let remote = NWConnection(to: .service(name: name, type: Tunnel.serviceType, domain: "local.", interface: nil), using: p)
-        remote.stateUpdateHandler = { [weak self] st in
-            switch st {
-            case .ready:
-                self?.pump(local, remote)
-                self?.pump(remote, local)
-            case .failed, .cancelled:
-                local.cancel()
-            default: break
+        let endpoint = NWEndpoint.service(name: name, type: Tunnel.serviceType, domain: "local.", interface: nil)
+        let any = NWParameters.tcp
+        any.includePeerToPeer = true
+        let direct = NWParameters.tcp
+        direct.includePeerToPeer = true
+        direct.prohibitedInterfaceTypes = [.wifi, .wiredEthernet, .cellular, .loopback]
+        let attempts = [NWConnection(to: endpoint, using: any), NWConnection(to: endpoint, using: direct)]
+        let winner = Once()
+        var failed = 0
+        for remote in attempts {
+            remote.stateUpdateHandler = { [weak self] st in
+                switch st {
+                case .ready:
+                    winner.run {
+                        for other in attempts where other !== remote { other.cancel() }
+                        remote.stateUpdateHandler = { st in
+                            switch st {
+                            case .failed, .cancelled: local.cancel()
+                            default: break
+                            }
+                        }
+                        local.stateUpdateHandler = { st in
+                            switch st {
+                            case .failed, .cancelled: remote.cancel()
+                            default: break
+                            }
+                        }
+                        self?.pump(local, remote)
+                        self?.pump(remote, local)
+                    }
+                case .failed:
+                    failed += 1   // runs on the tunnel queue only
+                    if failed == attempts.count { local.cancel() }
+                default: break
+                }
             }
         }
         local.stateUpdateHandler = { st in
             switch st {
-            case .failed, .cancelled: remote.cancel()
+            case .failed, .cancelled: attempts.forEach { $0.cancel() }
             default: break
             }
         }
         local.start(queue: queue)
-        remote.start(queue: queue)
-        // Not connected to the Mac within 10 s (out of reach, or a stale link after the app was in the background):
-        // close both sides so the request fails with an error instead of loading forever.
-        queue.asyncAfter(deadline: .now() + 10) {
-            if remote.state != .ready {
-                remote.cancel()
+        attempts.forEach { $0.start(queue: queue) }
+        // Not connected to the Mac within 15 s (out of reach, or a stale link after the app was in the background):
+        // close everything so the request fails with an error instead of loading forever.
+        queue.asyncAfter(deadline: .now() + 15) {
+            if !attempts.contains(where: { $0.state == .ready }) {
+                attempts.forEach { $0.cancel() }
                 local.cancel()
             }
         }

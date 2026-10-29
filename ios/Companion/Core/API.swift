@@ -131,6 +131,9 @@ final class API: NSObject, URLSessionDelegate, @unchecked Sendable {
     }
 
     static func describe(_ e: URLError, server: Server) -> String {
+        if server.isNearby, [.cannotConnectToHost, .networkConnectionLost, .timedOut, .notConnectedToInternet].contains(e.code) {
+            return "\(server.name) was found nearby, but the connection to it did not come up. Keep the iPhone close to the Mac, with Wi-Fi and Bluetooth switched on on both (no network needed), keep the Mac awake, and try again."
+        }
         switch e.code {
         case .notConnectedToInternet: return "This iPhone is offline. Join the same Wi-Fi as your Mac, or a VPN to it."
         case .timedOut: return "\(server.displayAddress) did not answer in time. Is the Mac awake and unplugged.ai running?"
