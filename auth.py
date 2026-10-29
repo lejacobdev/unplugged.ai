@@ -92,8 +92,8 @@ def register(name, password):
     name = (name or "").strip()
     if not NAME_RE.match(name):
         raise AuthError("Pick a username with 3 to 32 letters, numbers, dots, dashes or underscores.")
-    if len(password or "") < 6:
-        raise AuthError("Use a password with at least 6 characters.")
+    if len(password or "") < 8:
+        raise AuthError("Use a password with at least 8 characters.")
     uid = name.lower()
     with lock:
         us = users()
@@ -107,10 +107,19 @@ def register(name, password):
     return _new_session(uid, "user", name), first
 
 
-def login(name, password):
+IP_WINDOW, IP_MAX, IP_BLOCK = 15 * 60, 10, 15 * 60
+ip_fails: dict = {}   # address -> [times of recent wrong passwords]
+ip_blocked: dict = {}  # address -> blocked until
+
+
+def login(name, password, ip="local"):
+    """Per name: 5 wrong passwords lock it for 30 s. Per address: 10 wrong passwords in 15 minutes block that device for 15 minutes,
+    whatever names it tries (stops guessing many accounts or many passwords from one place)."""
     uid = (name or "").strip().lower()
     now = time.time()
     with lock:
+        if ip_blocked.get(ip, 0) > now:
+            raise AuthError(f"Too many wrong passwords from this device. Try again in {int((ip_blocked[ip] - now) / 60) + 1} minutes.")
         cnt, until = fails.get(uid, (0, 0))
         if until > now:
             raise AuthError(f"Too many wrong passwords. Try again in {int(until - now) + 1} seconds.")
@@ -120,6 +129,11 @@ def login(name, password):
         _hash(password or "", "00" * 16)  # keep timing similar
     if not ok:
         with lock:
+            recent = [t for t in ip_fails.get(ip, []) if now - t < IP_WINDOW] + [now]
+            ip_fails[ip] = recent
+            if len(recent) >= IP_MAX:
+                ip_blocked[ip] = now + IP_BLOCK
+                ip_fails.pop(ip, None)
             cnt += 1
             fails[uid] = (cnt, now + 30 if cnt >= 5 else 0)
             if cnt >= 5:

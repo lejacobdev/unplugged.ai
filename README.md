@@ -184,6 +184,9 @@ If the Mac is asleep or unreachable the app opens anyway and shows your saved ch
 * No cloud calls. Models, chats, pictures and music stay on your disk.
 * Passwords are stored as salted scrypt hashes. Sessions use HttpOnly, SameSite=Strict cookies. Logins lock for 30 seconds after five wrong passwords.
 * Everything except the sign-in page needs a login. Cross-site POSTs are rejected.
+* Knowing the Mac's address is not enough to use it. Accounts and guest sessions can only be created on the Mac itself (requests passed on by a proxy or tunnel, or addressed to another host name, do not count as the Mac), everything else needs an existing account, and the API needs a key.
+* Connections from the public internet are refused: only this Mac, private home networks, link-local addresses and VPN ranges such as Tailscale (100.64.0.0/10) are answered, so an accidentally opened router port exposes nothing. `JACOBAI_ALLOW_PUBLIC=1` turns this off (not recommended).
+* Password guessing is slowed down twice: five wrong passwords lock that name for 30 seconds, and ten wrong passwords from one device within 15 minutes block that device for 15 minutes. New passwords need at least 8 characters.
 * Guest sessions live in memory and temp files and are deleted after 30 minutes idle, on sign-out, and on server restart. Incognito chats are never written to disk.
 * The nearby bridge forwards to a separate local port (8001) where every client counts as remote: sign-in required, no guest mode, no account creation.
 * Web access is off until you switch it on; then searches and the pages the model opens go to the internet. API keys are stored hashed and shown once. Code the model writes runs in a sandbox without network access (see Code above for its limits).

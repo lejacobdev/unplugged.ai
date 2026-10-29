@@ -151,7 +151,7 @@ struct RemoteAccessHelp: View {
         HelpPage(title: "From anywhere", paragraphs: [
             "unplugged.ai is not hardened for the open internet, so do not forward its port on your router. Use a private network to your Mac instead.",
             "The simplest way is a mesh VPN such as Tailscale: install it on the Mac and on this iPhone and sign in to both with the same account. The Mac then has an address like 100.x.y.z or a name like mymac.your-tailnet.ts.net. Add that address here (Settings, Servers, Add a server by address), for example 100.64.1.5:8000.",
-            "If you run the server behind your own reverse proxy with a proper certificate, add it with its https address, for example https://ai.example.com.",
+            "For safety the server refuses everyone outside your own networks (home network, link-local and VPN addresses such as Tailscale). Opening a port on your router therefore does not work, on purpose. Only if you really want a public https domain behind your own reverse proxy, start the server with JACOBAI_ALLOW_PUBLIC=1, and use long passwords.",
             "Remote servers can be any machine running unplugged.ai, not only your own Mac, as long as you have an account there.",
         ])
     }

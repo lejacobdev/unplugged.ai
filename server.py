@@ -4,6 +4,7 @@
 
 Everything runs on this Mac; the server only listens on localhost.
 """
+import ipaddress
 import json
 import os
 import urllib.error
@@ -311,8 +312,51 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # ---------- helpers
+    PROXY_HEADERS = ("X-Forwarded-For", "Forwarded", "X-Real-IP", "X-Forwarded-Host", "CF-Connecting-IP", "True-Client-IP")
+
+    def proxied(self):
+        return any(self.headers.get(h) for h in self.PROXY_HEADERS)
+
     def is_local(self):
-        return self.client_address[0] in ("127.0.0.1", "::1")
+        """Really on this Mac: loopback, not passed on by a proxy or tunnel, and addressed as localhost."""
+        if self.client_address[0] not in ("127.0.0.1", "::1") or self.proxied():
+            return False
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        return host in ("127.0.0.1", "localhost", "::1", "")
+
+    def peer_ip(self):
+        """The address of the device asking. Behind a proxy on this Mac, the first forwarded address."""
+        ip = self.client_address[0]
+        if ip in ("127.0.0.1", "::1") and self.proxied():
+            fwd = (self.headers.get("X-Forwarded-For") or self.headers.get("X-Real-IP") or self.headers.get("CF-Connecting-IP")
+                   or self.headers.get("True-Client-IP") or "").split(",")[0].strip()
+            if not fwd and self.headers.get("Forwarded"):
+                m = re.search(r'for="?\[?([^\]";,]+)', self.headers.get("Forwarded"))
+                fwd = m.group(1) if m else ""
+            return fwd or "unknown"
+        return ip
+
+    def allowed_peer(self):
+        """Only devices on your own networks may connect: this Mac, your home network, link-local, and VPN ranges
+        (Tailscale 100.64.0.0/10). Everyone on the public internet is refused, even if the port was opened by mistake,
+        unless JACOBAI_ALLOW_PUBLIC=1."""
+        if ALLOW_PUBLIC:
+            return True
+        try:
+            a = ipaddress.ip_address(self.peer_ip().split("%")[0])
+        except ValueError:
+            return False
+        if a.version == 6 and a.ipv4_mapped:
+            a = a.ipv4_mapped
+        return a.is_loopback or a.is_private or a.is_link_local or (a.version == 4 and a in CGNAT)
+
+    def refuse_public(self):
+        """True (and answers 403) when the request comes from outside your own networks."""
+        if self.allowed_peer():
+            return False
+        logbus.log("system", f"refused a connection from {self.peer_ip()} (public internet)")
+        self.send(403, {"error": "unplugged.ai only accepts connections from your own networks. Use a VPN such as Tailscale to reach it from outside."})
+        return True
 
     def body_json(self):
         return json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
@@ -401,6 +445,8 @@ class Handler(BaseHTTPRequestHandler):
             return err(502, f"The language model is not reachable: {e}", "upstream_error")
 
     def do_GET(self):
+        if self.refuse_public():
+            return
         if self.path.startswith("/v1/"):
             return self.v1()
         if self.path.split("?")[0] == "/api/ping":   # no login: lets the companion app recognise an unplugged.ai server
@@ -512,6 +558,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- POST
     def do_POST(self):
+        if self.refuse_public():
+            return
         if self.path.startswith("/v1/"):
             return self.v1()
         path = urlparse(self.path).path
@@ -665,7 +713,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/auth/login":
                 b = self.body_json()
-                s = auth.login(b.get("name"), b.get("password"))
+                s = auth.login(b.get("name"), b.get("password"), self.peer_ip())
                 return self.send(200, {"ok": True}, cookies=[auth.cookie_header(s)])
             if path == "/api/auth/register":
                 if not self.is_local():
@@ -794,6 +842,8 @@ class Handler(BaseHTTPRequestHandler):
                 pass
 
     def do_DELETE(self):
+        if self.refuse_public():
+            return
         if not self.same_origin():
             return self.send(403, {"error": "cross-site request blocked"})
         if not self.need_login():
@@ -881,6 +931,8 @@ class BridgeHandler(Handler):
         return False
 
 
+ALLOW_PUBLIC = os.environ.get("JACOBAI_ALLOW_PUBLIC") == "1"
+CGNAT = ipaddress.ip_network("100.64.0.0/10")
 BRIDGE_PORT = int(os.environ.get("JACOBAI_BRIDGE_PORT", 8001))
 LAN = os.environ.get("JACOBAI_LAN", "1") == "1"  # also reachable from your phone on the same Wi-Fi (sign-in required)
 
