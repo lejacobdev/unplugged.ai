@@ -62,12 +62,27 @@ listener.stateUpdateHandler = { st in
 }
 listener.start(queue: .main)
 // When the Mac changes networks the peer-to-peer announcement can go stale: quit, and server.py starts a fresh bridge.
+// Only a real change counts (another Wi-Fi network, Wi-Fi switched on or off): small path updates happen all the time
+// and restarting on those would cut open connections. Wait 5 s so a switch can settle first.
 let monitor = NWPathMonitor()
-var firstPath = true
+func key(_ p: NWPath) -> String {
+    "\(p.status)|" + p.availableInterfaces.filter { $0.type != .other && $0.type != .loopback }.map { $0.name }.sorted().joined(separator: ",")
+}
+var known: String?
+var pending: DispatchWorkItem?
 monitor.pathUpdateHandler = { path in
-    if firstPath { firstPath = false; return }
-    print("bridge: network changed, restarting"); fflush(stdout)
-    exit(0)
+    let k = key(path)
+    if known == nil { known = k; return }
+    pending?.cancel()
+    guard k != known else { return }
+    let w = DispatchWorkItem {
+        if key(monitor.currentPath) != known {
+            print("bridge: network changed (\(known ?? "") -> \(key(monitor.currentPath))), restarting"); fflush(stdout)
+            exit(0)
+        }
+    }
+    pending = w
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: w)
 }
 monitor.start(queue: .main)
 signal(SIGTERM) { _ in exit(0) }

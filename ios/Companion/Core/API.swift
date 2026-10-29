@@ -120,7 +120,15 @@ final class API: NSObject, URLSessionDelegate, @unchecked Sendable {
 
     func send(_ r: URLRequest) async throws -> (Data, HTTPURLResponse) {
         do {
-            let (data, resp) = try await session.data(for: r)
+            let (data, resp): (Data, URLResponse)
+            do {
+                (data, resp) = try await session.data(for: r)
+            } catch let e as URLError where server.isNearby && [.networkConnectionLost, .cannotConnectToHost, .timedOut].contains(e.code) {
+                // the direct link to a nearby Mac drops now and then: try once more on a fresh connection
+                if let n = server.nearbyName { try? await Tunnel.shared.start(n) }
+                try await Task.sleep(for: .milliseconds(600))
+                (data, resp) = try await session.data(for: r)
+            }
             guard let http = resp as? HTTPURLResponse else { throw APIError.network("No answer from the server.") }
             return (data, http)
         } catch let e as APIError {

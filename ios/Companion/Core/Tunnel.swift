@@ -11,6 +11,10 @@ final class Tunnel: @unchecked Sendable {
     private let queue = DispatchQueue(label: "dev.lejacob.unplugged.tunnel")
     private let lock = NSLock()
     private var listener: NWListener?
+    /// A running peer-to-peer browse keeps the iPhone's direct link to the Mac awake. Without one, iOS powers the link down
+    /// after a short while and new requests cannot reach the Mac (opening Settings, Servers fixed it only because that
+    /// screen browses too).
+    private var keepAwake: NWBrowser?
     private var service: String?
     private var localPort: UInt16 = 0
     private var lastName: String?
@@ -55,7 +59,18 @@ final class Tunnel: @unchecked Sendable {
             }
             l.start(queue: queue)
         }
-        lock.withLock { listener = l }
+        let b = NWBrowser(for: .bonjour(type: Tunnel.serviceType, domain: "local."), using: {
+            let p = NWParameters()
+            p.includePeerToPeer = true
+            return p
+        }())
+        b.browseResultsChangedHandler = { _, _ in }
+        b.start(queue: queue)
+        lock.withLock {
+            listener = l
+            keepAwake?.cancel()
+            keepAwake = b
+        }
     }
 
     /// After the app was in the background the local listener can be stale: start it fresh.
@@ -67,6 +82,8 @@ final class Tunnel: @unchecked Sendable {
 
     func stop() {
         lock.withLock {
+            keepAwake?.cancel()
+            keepAwake = nil
             listener?.cancel()
             listener = nil
             service = nil

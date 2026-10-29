@@ -112,6 +112,14 @@ final class AppModel {
             needsSignIn = api.server
         } catch {
             connection = .offline(error.localizedDescription)
+            // Nearby: the direct link comes and goes; keep trying quietly instead of waiting for the user.
+            if api.server.isNearby {
+                let id = api.server.id
+                Task {
+                    try? await Task.sleep(for: .seconds(4))
+                    if case .offline = connection, store.activeID == id { await refresh() }
+                }
+            }
         }
     }
 
