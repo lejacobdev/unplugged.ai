@@ -980,8 +980,18 @@ def start_bridge():
         if r.returncode != 0:
             logbus.log("system", "nearby bridge could not be built: " + r.stderr[-300:])
             return
-    p = subprocess.Popen([str(exe), str(BRIDGE_PORT), f"unplugged.ai on {HOSTNAME}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    atexit.register(p.terminate)
+    procs = []
+
+    def keep_running():
+        """The bridge quits when the Mac changes networks; start it again each time."""
+        while True:
+            p = subprocess.Popen([str(exe), str(BRIDGE_PORT), f"unplugged.ai on {HOSTNAME}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            procs[:] = [p]
+            p.wait()
+            time.sleep(2)
+
+    atexit.register(lambda: [p.terminate() for p in procs])
+    threading.Thread(target=keep_running, daemon=True).start()
 
 
 def serve():

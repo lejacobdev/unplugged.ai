@@ -61,5 +61,14 @@ listener.stateUpdateHandler = { st in
     }
 }
 listener.start(queue: .main)
+// When the Mac changes networks the peer-to-peer announcement can go stale: quit, and server.py starts a fresh bridge.
+let monitor = NWPathMonitor()
+var firstPath = true
+monitor.pathUpdateHandler = { path in
+    if firstPath { firstPath = false; return }
+    print("bridge: network changed, restarting"); fflush(stdout)
+    exit(0)
+}
+monitor.start(queue: .main)
 signal(SIGTERM) { _ in exit(0) }
 dispatchMain()
