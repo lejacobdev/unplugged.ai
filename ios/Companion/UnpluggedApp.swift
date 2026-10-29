@@ -51,7 +51,12 @@ struct UnpluggedApp: App {
             .environment(app)
             .tint(UP.ink)
             .onChange(of: phase) { _, now in
-                if now == .active, app.server != nil { Task { await app.refresh() } }
+                if now == .active, let s = app.server {
+                    Task {
+                        if s.isNearby { await Tunnel.shared.restart() }
+                        await app.refresh()
+                    }
+                }
             }
         }
     }

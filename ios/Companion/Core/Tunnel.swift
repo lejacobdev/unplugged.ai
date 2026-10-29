@@ -56,6 +56,13 @@ final class Tunnel: @unchecked Sendable {
         lock.withLock { listener = l }
     }
 
+    /// After the app was in the background the local listener can be stale: start it fresh.
+    func restart() async {
+        let name = lock.withLock { service }
+        stop()
+        if let name { try? await start(name) }
+    }
+
     func stop() {
         lock.withLock {
             listener?.cancel()
@@ -76,9 +83,6 @@ final class Tunnel: @unchecked Sendable {
                 self?.pump(remote, local)
             case .failed, .cancelled:
                 local.cancel()
-            case .waiting:
-                // the Mac is out of reach: give up after a while so the request fails instead of hanging
-                self?.queue.asyncAfter(deadline: .now() + 8) { if remote.state != .ready { remote.cancel(); local.cancel() } }
             default: break
             }
         }
@@ -90,6 +94,14 @@ final class Tunnel: @unchecked Sendable {
         }
         local.start(queue: queue)
         remote.start(queue: queue)
+        // Not connected to the Mac within 10 s (out of reach, or a stale link after the app was in the background):
+        // close both sides so the request fails with an error instead of loading forever.
+        queue.asyncAfter(deadline: .now() + 10) {
+            if remote.state != .ready {
+                remote.cancel()
+                local.cancel()
+            }
+        }
     }
 
     private func pump(_ from: NWConnection, _ to: NWConnection) {
