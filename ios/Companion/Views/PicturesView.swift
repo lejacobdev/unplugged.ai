@@ -15,7 +15,7 @@ struct PicturesView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var source: UIImage?
     @State private var ePrompt = ""
-    @State private var preserve = true
+    @State private var preserve = false
     @State private var livePreview = true
     @State private var quality = "high"
     @State private var size = 1024
@@ -97,7 +97,7 @@ struct PicturesView: View {
             FieldLabel(title: "What should change?")
             WandlessField(text: $ePrompt, placeholder: "Make the dog wear a red knitted hat", minHeight: 80)
             Toggle("Live preview while it works", isOn: $livePreview).font(.system(size: 15))
-            Toggle("Keep everything else exactly the same", isOn: $preserve).font(.system(size: 15))
+            Toggle("Add \"keep everything else the same\" to my prompt", isOn: $preserve).font(.system(size: 15))
             FieldLabel(title: "Quality")
             GlassSelect(options: [("standard", "Standard (28 steps)", nil), ("high", "High (40 steps)", nil), ("maximum", "Maximum (60 steps, slowest)", nil)], selection: $quality)
             FieldLabel(title: "Picture size (long side)")

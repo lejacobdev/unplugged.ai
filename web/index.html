@@ -268,7 +268,7 @@
     <label>What should change?
       <textarea id="iprompt" rows="4" placeholder="Make the dog wear a red knitted hat"></textarea></label>
     <div class="check"><input type="checkbox" id="livepv" checked><label for="livepv" style="margin:0">Live preview of the picture while it works (slightly slower)</label></div>
-    <div class="check"><input type="checkbox" id="preserve" checked><label for="preserve" style="margin:0">Keep everything else exactly the same</label></div>
+    <div class="check"><input type="checkbox" id="addkeep"><label for="addkeep" style="margin:0">Add "keep everything else exactly the same" to my prompt <span class="hint" style="font-weight:400">(off: your prompt is used exactly as written)</span></label></div>
     <label>Quality <select id="iquality">
       <option value="standard">Standard (28 steps)</option>
       <option value="high" selected>High (40 steps)</option>
@@ -413,7 +413,7 @@ $('theme').onclick = () => {
 // ---- remember every setting + running jobs across page refreshes
 const LS = Store;
 const FORM_IDS = ['mlen', 'minst', 'mcap', 'mlyr', 'mprompt',
-                  'livepv', 'preserve', 'iquality', 'isize', 'guid', 'ivar', 'iseed', 'iprompt'];
+                  'livepv', 'addkeep', 'iquality', 'isize', 'guid', 'ivar', 'iseed', 'iprompt'];
 (() => {
   const saved = LS.get('jacobai-form') || {};
   for (const id of FORM_IDS) {
@@ -703,7 +703,7 @@ $('iedit').onclick = async () => {
   $('iedit').disabled = true; imgStarting = true; $('istatus').textContent = 'Starting… the first step includes loading the model.';
   try {
     const { job } = await api('/api/img/edit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      image: srcData, prompt: $('iprompt').value, preserve: $('preserve').checked, quality: $('iquality').value,
+      image: srcData, prompt: $('iprompt').value, preserve: $('addkeep').checked, quality: $('iquality').value,
       max_side: +$('isize').value, live_preview: $('livepv').checked, guidance: +$('guid').value, variations: +$('ivar').value, seed: $('iseed').value }) });
     followImg(job); imgStarting = false;
   } catch (e) { imgStarting = false; $('istatus').textContent = 'Error: ' + e.message; updateBtn(); }

@@ -284,7 +284,7 @@ def start_edit(p: dict):
     jobs[job_id] = {
         "status": "queued", "owner": owner["uid"], "ephemeral": ephemeral, "message": "", "step": 0, "variation": 0, "variations": n,
         "steps": STEPS.get(p.get("quality", "high"), 40), "seeds": [seed0 + i for i in range(n)],
-        "prompt": prompt, "full_prompt": prompt + (PRESERVE if p.get("preserve", True) else ""),
+        "prompt": prompt, "full_prompt": prompt + (PRESERVE if p.get("preserve", False) else ""),   # only when asked: the prompt is otherwise used exactly as written
         "results": [], "preview": None, "preview_n": 0, "input": in_png.name, "size": [w, h], "created": time.time(), "started": time.time(),
     }
     if ephemeral:
