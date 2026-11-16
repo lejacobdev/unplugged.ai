@@ -85,6 +85,10 @@ def _run(job_id, p, in_png, w, h):
                            "--output", str(out)]
                     for lp, ls in p.get("loras", []):
                         cmd += ["--lora", lp, str(ls)]
+                    if p.get("loras"):
+                        # Keep LoRAs as separate adapters: merging them into the saved 8-bit weights rounds most of
+                        # their effect away (mflux bakes by default), so a LoRA seemed to do nothing.
+                        cmd += ["--no-bake-lora"]
                 steps_dir = DIR / f"{job_id}_steps_{k}"
                 if p.get("live_preview", True) and not STUB:
                     steps_dir.mkdir(exist_ok=True)
